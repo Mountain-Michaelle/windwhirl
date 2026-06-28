@@ -1,0 +1,46 @@
+
+"""
+# ──────────────────────────────────────────────────────────────
+# WhatsApp login session
+# Contains cookies that give full access to your WhatsApp account
+# NEVER commit or share this folder under any circumstances
+# ──────────────────────────────────────────────────────────────
+.sessions/
+
+# ──────────────────────────────────────────────────────────────
+# Python virtual environment
+# Large folder (100MB+), not needed in version control
+# Each developer creates their own with: uv venv
+# ──────────────────────────────────────────────────────────────
+.venv/
+venv/
+
+# ──────────────────────────────────────────────────────────────
+# SQLite database
+# Contains customer names, phone numbers, and send history
+# ──────────────────────────────────────────────────────────────
+data/*.db
+
+# ──────────────────────────────────────────────────────────────
+# Auto-generated runtime folders
+# These are created by the system when it runs
+# ──────────────────────────────────────────────────────────────
+logs/
+reports/
+screenshots/
+
+# ──────────────────────────────────────────────────────────────
+# Python bytecode cache
+# Auto-generated, safe to delete, not needed in version control
+# ──────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ──────────────────────────────────────────────────────────────
+# Operating system noise files
+# ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+"""
