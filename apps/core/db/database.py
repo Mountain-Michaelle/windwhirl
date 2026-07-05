@@ -484,6 +484,37 @@ class Database:
 
                 session.commit()
 
+    def reset_failed(self) -> int:
+        """
+        Reset retryable failures back to PENDING.
+
+        FAILED → PENDING
+        FAILED_FINAL → untouched
+        SENT → untouched
+        INVALID_NUMBER → untouched
+        """
+
+        with self._session() as session:
+            rows = (
+                session.query(SendLog)
+                .filter(SendLog.status == SendStatus.FAILED)
+                .all()
+            )
+
+            for row in rows:
+                row.status = SendStatus.PENDING
+                row.updated_at = datetime.now()
+
+            count = len(rows)
+
+            session.commit()
+
+            self._log.info(
+                f"Reset {count} FAILED entries back to PENDING."
+            )
+
+            return count
+
     def mark_invalid(self, order_id: str):
         """
         Mark a customer as INVALID_NUMBER — their phone is not on WhatsApp.
@@ -530,25 +561,25 @@ class Database:
                 for c, l in rows
             ]
 
-    def reset_failed(self) -> int:
-        """
-        Resets all FAILED (not FAILED_FINAL) send_log entries back to PENDING.
-        Called by the --reset-failed CLI command so these customers
-        are picked up in the next day's sending run.
+    # def reset_failed(self) -> int:
+    #     """
+    #     Resets all FAILED (not FAILED_FINAL) send_log entries back to PENDING.
+    #     Called by the --reset-failed CLI command so these customers
+    #     are picked up in the next day's sending run.
 
-        Returns:
-            Number of records reset.
-        """
-        with self._session() as session:
-            rows = session.query(SendLog).filter_by(
-                status=SendStatus.FAILED
-            ).all()
-            for row in rows:
-                row.status = SendStatus.PENDING
-            session.commit()
-            count = len(rows)
-            self._log.info(f"Reset {count} FAILED entries to PENDING.")
-            return count
+    #     Returns:
+    #         Number of records reset.
+    #     """
+    #     with self._session() as session:
+    #         rows = session.query(SendLog).filter_by(
+    #             status=SendStatus.SENT
+    #         ).all()
+    #         for row in rows:
+    #             row.status = SendStatus.FAILED
+    #         session.commit()
+    #         count = len(rows)
+    #         self._log.info(f"Reset {count} FAILED entries to PENDING.")
+    #         return count
 
     # ── REPORTING ──────────────────────────────────────────────
 
@@ -673,3 +704,38 @@ class Database:
                 c.first_name
                 for c in session.query(Customer).limit(limit).all()
             ]
+            
+        
+    def get_all_statuses(self) -> dict:
+            """
+            Returns a dict of every customer's send status.
+            Used by ExcelReporter to populate the Status/Comment column.
+
+            Returns:
+                {
+                    "ORD001": {
+                        "status": "SENT",
+                        "error_message": ""
+                    },
+                    "ORD002": {
+                        "status": "FAILED",
+                        "error_message": "Timeout waiting for tick"
+                    },
+                    ...
+                }
+            """
+            with self._session() as session:
+                rows = (
+                    session.query(Customer, SendLog)
+                    .join(SendLog, Customer.id == SendLog.customer_id)
+                    .all()
+                )
+
+                result = {}
+                for customer, log in rows:
+                    result[customer.order_id] = {
+                        "status":        log.status,
+                        "error_message": log.error_message or "",
+                    }
+                return result
+            

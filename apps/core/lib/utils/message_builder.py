@@ -3,8 +3,7 @@ import random
 import re
 from pathlib import Path
 from apps.core.lib.utils.greeting_utils import get_greeting
-
-
+from apps.core.lib.utils.date_utils import format_order_date
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, Undefined
 
 logger = logging.getLogger(__name__)
@@ -91,6 +90,7 @@ class MessageBuilder:
         rendered = template.render(
             first_name    =customer.get("first_name", "Customer"),
             day_greeting  = get_greeting(customer.get("timezone", "Africa/Lagos")),
+            order_date    =format_order_date(customer.get("order_date", None)),
             discount_offer=self._cfg.discount_offer,
             review_link   =self._cfg.review_link,
         )
@@ -128,10 +128,12 @@ class MessageBuilder:
             # label   → "B"
         """
         # Random choice, but flip if it matches the last one used
-        choice = random.choice(["A", "B"])
-        if choice == self._last:
-            choice = "B" if choice == "A" else "A"
-        self._last = choice
+        # choice = random.choice(["A", "B"])
+        # if choice == self._last:
+        #     choice = "B" if choice == "A" else "A"
+        # self._last = choice
+        
+        choice = "A"
 
         message = self._render(choice, customer)
 

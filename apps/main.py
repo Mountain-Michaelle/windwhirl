@@ -1,71 +1,15 @@
 # ==============================================================
-# main.py
-# PATH: windwhirl/apps/main.py
-# ==============================================================
-# WHAT CHANGED FROM YOUR CURRENT VERSION:
-#   Added a PATH SETUP block at the very top (lines 1-15).
-#   This is the ONLY change. Everything else is identical.
-#
-# WHY IT FAILED:
-#   You run:  python main.py  from inside windwhirl/apps/
-#   Your imports say: from apps.config import AppConfig
-#   Python looks for a folder called "apps" inside the current folder.
-#   Current folder IS "apps" — so Python can't find "apps" inside itself.
-#
-#   The fix: add windwhirl/ (the PARENT of apps/) to sys.path.
-#   Then Python can find apps/ as a package inside windwhirl/.
-#
-# YOUR FOLDER STRUCTURE (what we assume based on your error):
-#   windwhirl/
-#   ├── apps/
-#   │   ├── main.py                        ← you run this
-#   │   ├── config.py                      ← from apps.config
-#   │   └── core/
-#   │       ├── db/
-#   │       │   └── database.py            ← from apps.core.db.database
-#   │       └── lib/
-#   │           ├── scheduler/
-#   │           │   └── scheduler.py       ← from apps.core.lib.scheduler.scheduler
-#   │           └── utils/
-#   │               ├── data_reader.py     ← from apps.core.lib.utils.data_reader
-#   │               ├── message_builder.py ← from apps.core.lib.utils.message_builder
-#   │               ├── playwright_sender.py
-#   │               ├── reporter.py
-#   │               └── whatsapp_sender.py
-# ==============================================================
-
-# ==============================================================
 # PATH SETUP — MUST BE FIRST, BEFORE EVERYTHING ELSE
-# ==============================================================
-# This adds windwhirl/ (the parent of apps/) to Python's module
-# search path so that "from apps.config import AppConfig" works
-# correctly when you run "python main.py" from inside apps/.
-#
-# Path(__file__).resolve()        → full path to main.py
-#                                   e.g. C:\...\windwhirl\apps\main.py
-# .parent                         → apps/ folder
-# .parent                         → windwhirl/ folder  ← we add THIS
-#
-# sys.path.insert(0, ...)         → insert at position 0 so it is
-#                                   checked FIRST before anything else
 # ==============================================================
 import sys
 from pathlib import Path
 
-# Add windwhirl/ (parent of apps/) to Python's search path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
-
-# Confirm path is set (visible in logs/automation.log at DEBUG level)
-# Remove this print once everything is working
-print(f"[PATH] Project root added: {_PROJECT_ROOT}")
-print(f"[PATH] sys.path[0]: {sys.path[0]}")
-
 # ==============================================================
 # END PATH SETUP
 # ==============================================================
-
 
 import argparse
 import asyncio
@@ -76,11 +20,6 @@ import signal
 # ==============================================================
 # LOGGING SETUP
 # ==============================================================
-# Must run before any src/apps imports because those modules
-# call logging.getLogger() at module load time.
-# If logging is set up after them, their log messages are lost.
-# ==============================================================
-
 def _setup_logging():
     """Configure console + rotating file logging for the application."""
     import logging.handlers
@@ -90,7 +29,7 @@ def _setup_logging():
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
 
-    # Console: INFO and above — clean output the user reads in real time
+    # Console: INFO and above
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter(
@@ -98,10 +37,10 @@ def _setup_logging():
         datefmt="%H:%M:%S"
     ))
 
-    # File: DEBUG and above — full trace for troubleshooting
+    # File: DEBUG and above
     file_h = logging.handlers.RotatingFileHandler(
         "logs/automation.log",
-        maxBytes=5 * 1024 * 1024,   # 5 MB per file
+        maxBytes=5 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8"
     )
@@ -114,16 +53,13 @@ def _setup_logging():
     root.addHandler(console)
     root.addHandler(file_h)
 
+
 _setup_logging()
 
 
 # ==============================================================
 # APPLICATION IMPORTS
 # ==============================================================
-# These now work because windwhirl/ is in sys.path,
-# so Python can find apps/ as a package inside windwhirl/.
-# ==============================================================
-
 from apps.config import AppConfig
 from apps.core.db.database import Database
 from apps.core.lib.utils.data_reader import DataReader
@@ -136,39 +72,10 @@ log = logging.getLogger("main")
 
 
 # ==============================================================
-# ALSO CHECK: Every __init__.py must exist
-# ==============================================================
-# Python needs an __init__.py in EVERY folder that is part of
-# an import path. Check these files all exist (can be empty):
-#
-#   windwhirl/apps/__init__.py
-#   windwhirl/apps/core/__init__.py
-#   windwhirl/apps/core/db/__init__.py
-#   windwhirl/apps/core/lib/__init__.py
-#   windwhirl/apps/core/lib/scheduler/__init__.py
-#   windwhirl/apps/core/lib/utils/__init__.py
-#
-# Quick check — run this in PowerShell:
-#   Get-ChildItem -Recurse -Filter "__init__.py" | Select FullName
-#
-# If any are missing, create them as empty files:
-#   New-Item apps\core\__init__.py -ItemType File
-#   New-Item apps\core\db\__init__.py -ItemType File
-#   New-Item apps\core\lib\__init__.py -ItemType File
-#   New-Item apps\core\lib\scheduler\__init__.py -ItemType File
-#   New-Item apps\core\lib\utils\__init__.py -ItemType File
-# ==============================================================
-
-
-# ==============================================================
 # FOLDER SETUP
 # ==============================================================
-
 def _create_directories():
-    """
-    Create all required runtime directories if they don't exist.
-    Called before every command.
-    """
+    """Create all required runtime directories if they don't exist."""
     for folder in ["data", ".sessions", "logs", "reports", "screenshots"]:
         Path(folder).mkdir(parents=True, exist_ok=True)
 
@@ -176,12 +83,8 @@ def _create_directories():
 # ==============================================================
 # CLI COMMAND FUNCTIONS
 # ==============================================================
-
 async def cmd_setup(cfg: AppConfig):
-    """
-    --setup: First-time initialization.
-    Creates folders, imports Excel, opens browser for QR scan.
-    """
+    """--setup: First-time initialization."""
     print("\n" + "=" * 55)
     print("  WHATSAPP AUTOMATION — SETUP")
     print("=" * 55)
@@ -200,7 +103,7 @@ async def cmd_setup(cfg: AppConfig):
         print("   Then run --setup again.")
         return
 
-    reader    = DataReader(cfg.country_code)
+    reader = DataReader(cfg.country_code)
     customers = reader.read_and_filter(excel_path, cfg.target_product)
 
     if not customers:
@@ -240,14 +143,11 @@ async def cmd_setup(cfg: AppConfig):
 
 
 def cmd_preview(cfg: AppConfig):
-    """
-    --preview: Show customer stats and today's schedule.
-    No browser. No sending.
-    """
+    """--preview: Show customer stats and today's schedule."""
     db = Database(cfg.database_url)
     db.init()
 
-    stats   = db.get_stats()
+    stats = db.get_stats()
     samples = db.get_sample_customers(5)
 
     print("\n" + "=" * 50)
@@ -279,10 +179,7 @@ def cmd_preview(cfg: AppConfig):
 
 
 def cmd_dry_run(cfg: AppConfig):
-    """
-    --dry-run: Preview messages for first 3 customers.
-    No browser. No sending.
-    """
+    """--dry-run: Preview messages for first 3 customers."""
     cmd_preview(cfg)
 
     db = Database(cfg.database_url)
@@ -302,10 +199,7 @@ def cmd_dry_run(cfg: AppConfig):
 
     for customer in pending:
         print(f"\n  {'─' * 45}")
-        print(
-            f"  Customer: {customer['first_name']}  "
-            f"|  Order: {customer['order_id']}"
-        )
+        print(f"  Customer: {customer['first_name']}  |  Order: {customer['order_id']}")
         print(f"  {'─' * 45}")
 
         both = builder.preview(customer)
@@ -324,22 +218,18 @@ def cmd_dry_run(cfg: AppConfig):
 
 
 async def cmd_run(cfg: AppConfig, run_now: bool = False, count: int = 3):
-    """
-    --run:                  Full 6-session scheduled day.
-    --run --now:            Immediate session (default 3 messages).
-    --run --now --count N:  Immediate session with N messages.
-    """
+    """--run: Full scheduled day or immediate session."""
     if cfg.daily_limit > 200:
         print(
             f"\n⚠️  WARNING: daily_limit={cfg.daily_limit} exceeds "
             f"recommended maximum of 200.\n"
         )
 
-    db       = Database(cfg.database_url)
+    db = Database(cfg.database_url)
     db.init()
-    builder  = MessageBuilder(cfg)
-    reporter = Reporter()
-    sender   = PlaywrightSender(cfg)
+    builder = MessageBuilder(cfg)
+    reporter = Reporter(cfg)
+    sender = PlaywrightSender(cfg)
 
     try:
         log.info("Connecting to WhatsApp Web...")
@@ -367,12 +257,10 @@ async def cmd_run(cfg: AppConfig, run_now: bool = False, count: int = 3):
 
 
 def cmd_report(cfg: AppConfig):
-    """
-    --report: Generate today's report and optionally email it.
-    """
-    db       = Database(cfg.database_url)
+    """--report: Generate today's report and optionally email it."""
+    db = Database(cfg.database_url)
     db.init()
-    reporter = Reporter()
+    reporter = Reporter(cfg)
 
     report_text = reporter.generate_report(db)
     print("\n" + report_text)
@@ -391,10 +279,8 @@ def cmd_report(cfg: AppConfig):
 
 
 def cmd_reset_failed(cfg: AppConfig):
-    """
-    --reset-failed: Reset FAILED → PENDING for retry tomorrow.
-    """
-    db    = Database(cfg.database_url)
+    """--reset-failed: Reset FAILED → PENDING for retry tomorrow."""
+    db = Database(cfg.database_url)
     db.init()
     count = db.reset_failed()
     print(f"\n✅ {count} message(s) reset to PENDING for next --run.")
@@ -405,10 +291,8 @@ def cmd_reset_failed(cfg: AppConfig):
 # ==============================================================
 # MAIN ENTRY POINT
 # ==============================================================
-
 def main():
     """Parse CLI args, run startup checks, dispatch to commands."""
-
     parser = argparse.ArgumentParser(
         prog="python main.py",
         description="WhatsApp Review Automation System",
@@ -425,13 +309,13 @@ Examples:
         """
     )
 
-    parser.add_argument("--setup",        action="store_true")
-    parser.add_argument("--preview",      action="store_true")
-    parser.add_argument("--dry-run",      action="store_true", dest="dry_run")
-    parser.add_argument("--run",          action="store_true")
-    parser.add_argument("--now",          action="store_true")
-    parser.add_argument("--count",        type=int, default=3)
-    parser.add_argument("--report",       action="store_true")
+    parser.add_argument("--setup", action="store_true")
+    parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", dest="dry_run")
+    parser.add_argument("--run", action="store_true")
+    parser.add_argument("--now", action="store_true")
+    parser.add_argument("--count", type=int, default=3)
+    parser.add_argument("--report", action="store_true")
     parser.add_argument("--reset-failed", action="store_true", dest="reset_failed")
 
     args = parser.parse_args()
@@ -456,7 +340,7 @@ Examples:
         log.info(f"Signal {signum} received — shutting down.")
         sys.exit(0)
 
-    signal.signal(signal.SIGINT,  _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
     try:

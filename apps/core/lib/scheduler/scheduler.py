@@ -6,6 +6,7 @@ import random
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from apps.core.lib.utils.whatsapp_sender import WhatsAppSender, SendResult
+from apps.core.lib.utils.distraction import DistractionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ class Scheduler:
         self._builder   = builder
         self._reporter  = reporter
         self._scheduler = AsyncIOScheduler()
-        self._log       = logging.getLogger(self.__class__.__name__)
+        self._log       = logging.getLogger(self.__class__.__name__)   
+        self._distraction = None
 
         # Index of the last session — used to trigger end-of-day tasks
         self._last_session_idx = len(cfg.session_schedule) - 1
@@ -96,6 +98,17 @@ class Scheduler:
             return
 
         self._log.info(f"Fetched {len(customers)} customers for this session.")
+        
+        
+         # Initialize distraction engine if not done yet
+        # Uses the personal_whatsapp number for self-chat visits
+        if self._distraction is None:
+            self._distraction = DistractionEngine(
+                cfg=self._cfg,
+                page=self._sender._page,
+                own_number=getattr(self._cfg, 'personal_whatsapp', '')
+            )
+            self._log.debug("Distraction engine initialized.")
 
         # ── Per-session counters ───────────────────────────────
         sent_count    = 0
@@ -174,6 +187,15 @@ class Scheduler:
                 d.between_messages_min,
                 d.between_messages_max
             )
+            
+             # ── Human distraction between messages ─────────────
+            # Probabilistic — not every message triggers distraction.
+            # The engine decides internally based on streak length.
+            # Skip distraction after ALREADY_CONTACTED (no msg sent
+            # so no need to simulate post-send behaviour)
+            if result.status != "ALREADY_CONTACTED" and not is_last:
+                await self._distraction.maybe_distract()
+            
             jitter = random.uniform(d.jitter_min, d.jitter_max)
             delay  = max(30, base + jitter)   # Never below 30 seconds
 
@@ -219,34 +241,24 @@ class Scheduler:
             await self._end_of_day()
 
     async def _end_of_day(self):
-        """
-        Run after the final session of the day.
-        Generates the daily report and emails it if configured.
-        Logs info about any messages eligible for retry tomorrow.
-        """
-        self._log.info("All sessions complete. Running end-of-day tasks...")
+            """
+            Run after the final session of the day.
+            Generates both reports and sends Excel via WhatsApp.
+            """
+            self._log.info("All sessions complete. Running end-of-day tasks...")
 
-        report_text = self._reporter.generate_report(self._db)
-        print("\n" + report_text)
+            # Run the full report flow (text + Excel + WhatsApp send)
+            await self._reporter.run_end_of_day(self._db, self._sender)
 
-        if self._cfg.has_email():
-            sent = self._reporter.send_email(report_text, self._cfg)
-            if sent:
-                self._log.info(f"Report emailed to {self._cfg.smtp_to}")
-            else:
-                self._log.warning(
-                    "Email report failed. Check logs for SMTP error details."
+            # Report retry-eligible customers
+            retries = self._db.get_retry_eligible()
+            if retries:
+                self._log.info(
+                    f"{len(retries)} message(s) eligible for retry. "
+                    f"Run: python main.py --reset-failed"
                 )
-
-        # Report retry-eligible customers for tomorrow
-        retries = self._db.get_retry_eligible()
-        if retries:
-            self._log.info(
-                f"{len(retries)} message(s) eligible for retry. "
-                f"Run: python main.py --reset-failed"
-            )
-        else:
-            self._log.info("No messages need retry.")
+            else:
+                self._log.info("No messages need retry.")
 
     def start(self):
         """
@@ -310,3 +322,6 @@ class Scheduler:
             f"Immediate session — sending {count} message(s) now..."
         )
         await self.run_session(session_idx=0, session_count=count)
+        
+        
+        

@@ -1,3 +1,8 @@
+# ==============================================================
+# PLAYWRIGHT SENDER — COMPLETE FILE (FIXED)
+# ==============================================================
+# FULL HUMAN EMULATION + FINGERPRINT ROTATION
+# ==============================================================
 
 import asyncio
 import logging
@@ -5,594 +10,1014 @@ import random
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Tuple, List
+
 from apps.core.lib.utils.whatsapp_sender import WhatsAppSender, SendResult
-
-
+from apps.core.lib.utils.fingerprint_manager import FingerprintManager
 
 logger = logging.getLogger(__name__)
 
 
 class PlaywrightSender(WhatsAppSender):
     """
-    WhatsApp Web automation via Playwright async API.
-    Implements all 8 stealth behaviours defined in the class docstring above.
-
-    Extends WhatsAppSender (abstract interface from src/whatsapp_sender.py).
-    The Scheduler and CLI only talk to WhatsAppSender — they never
-    import PlaywrightSender directly. This keeps the swap path clean.
-
-    First run:  browser opens → QR code shown → scan with phone → session saved
-    Later runs: session loads from .sessions/ → no QR needed
+    WhatsApp Web automation with full human emulation + fingerprint rotation.
+    Single page, zero post-connect navigation.
     """
 
-    # ── WhatsApp Web CSS selectors ─────────────────────────────
-    # These target specific UI elements in WhatsApp Web's HTML.
-    # If WhatsApp updates their UI and selectors break, update here only.
+    # ── Selectors ──────────────────────────────────────────────
+    SEARCH_SEL = 'input[aria-label="Search or start a new chat"]'
+    
+    MSG_INPUT_SELS = [
+        'div[aria-label="Type a message"]',
+        'div[aria-label="Message"]',
+        'div[contenteditable="true"][data-tab="10"]',
+        'div[contenteditable="true"][data-tab="1"]',
+        'footer div[contenteditable="true"]',
+        'div[role="textbox"][contenteditable="true"]',
+    ]
+
     SEL = {
-        # The chat list on the left — confirms we're logged in
         "chat_list":     'div[aria-label="Chat list"]',
-
-        # QR code shown on first login
         "qr_code":       'canvas[aria-label="Scan me!"], div[data-ref]',
-
-        # The text input box at the bottom of a chat
-        "msg_input":     'div[aria-label="Type a message"]',
-
-        # The tick icon that appears after a message is delivered
-        # data-icon="msg-check"    = single grey tick (sent to server)
-        # data-icon="msg-dblcheck" = double grey tick (delivered to phone)
-        # Either confirms success — we don't need to wait for blue ticks
-        "sent_tick":     'span[data-icon="msg-check"], '
-                         'span[data-icon="msg-dblcheck"]',
-
-        # Paperclip / attachment button
+        "sent_tick":     'span[data-icon="msg-check"], span[data-icon="msg-dblcheck"]',
         "attach_btn":    'span[data-icon="attach-menu-plus"]',
-
-        # Caption input when sending an image
         "caption_input": 'div[aria-label="Add a caption"]',
+        "outgoing_msgs": 'div.message-out span.selectable-text',
+        "outgoing_alt":  '.message-out .copyable-text span',
     }
 
-    # ── Text that indicates a number is not on WhatsApp ────────
-    # WhatsApp Web shows one of these strings in a modal when the
-    # phone number navigated to is not a registered WhatsApp account.
+    CAMPAIGN_KEYWORDS = [
+        "sadoer", "collagen", "nabeau", "face serum",
+        "face cream", "honest experience", "share your review",
+        "voice note", "next order", "discount",
+    ]
+
     INVALID_TEXTS = [
         "phone number shared via url is invalid",
         "not on whatsapp",
         "invalid phone number",
     ]
 
+    # ── Timeouts ──────────────────────────────────────────────
+    _TIMEOUTS = {
+        "connect": 130_000,
+        "qr_scan": 140_000,
+        "search_bar": 8_000,
+        "msg_input": 15_000,
+        "tick": 15_000,
+        "file_upload": 8_000,
+        "media_editor": 10_000,
+    }
+
+    # ── Human Behavior Parameters ─────────────────────────────
+    _HUMAN_BEHAVIOR = {
+        "typing_speed_min": 80,
+        "typing_speed_max": 450,
+        "mistake_rate": 0.025,
+        "hesitation_min": 0.5,
+        "hesitation_max": 3.0,
+        "reading_time_min": 2.0,
+        "reading_time_max": 8.0,
+        "scroll_chance": 0.3,
+        "tab_switch_chance": 0.1,
+        "idle_chance": 0.2,
+        "idle_time_min": 2.0,
+        "idle_time_max": 8.0,
+        "daily_message_limit": 150,
+        "session_break_after": 1500,
+        "session_break_duration": 300,
+        "inter_message_delay_min": 30,
+        "inter_message_delay_max": 90,
+    }
+
     def __init__(self, cfg):
-        """
-        Args:
-            cfg: AppConfig instance — provides delay settings and paths.
-        """
-        self._cfg       = cfg
-        self._log       = logging.getLogger(self.__class__.__name__)
-
-        # Paths
+        self._cfg = cfg
+        self._log = logging.getLogger(self.__class__.__name__)
         self._sess_path = Path(".sessions") / "whatsapp_session"
-        self._ss_path   = Path("screenshots")
+        self._ss_path = Path("screenshots")
+        self._pw = None
+        self._ctx = None
+        self._page = None
+        self._sends_this_session = 0
+        self._is_initialized = False
+        self._last_state = None
+        self._is_restricted = False
+        
+        # ── Fingerprint Manager ──────────────────────────────────
+        self._fingerprint_manager = FingerprintManager(cache_dir=".fingerprints")
+        self._current_fingerprint = None
+        
+        # ── Session activity tracking ──────────────────────────
+        self._session_activity = {
+            "messages_sent": 0,
+            "session_start": datetime.now(),
+            "active_time": 0,
+            "last_activity": datetime.now(),
+            "daily_count": 0,
+            "last_daily_reset": datetime.now().date(),
+        }
 
-        # Playwright objects — initialized in connect()
-        self._pw      = None   # Playwright instance
-        self._ctx     = None   # Browser context (persistent, holds session)
-        self._page    = None   # Active browser tab
-
-        # STEALTH 8: Tab rotation tracking
-        # After _rotate_after messages, navigate home to reset session patterns
-        self._msgs_on_tab  = 0
-        self._rotate_after = random.randint(8, 12)
-
-    # ── CONNECTION ─────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════
+    # CONNECTION WITH FINGERPRINT ROTATION
+    # ═══════════════════════════════════════════════════════════
 
     async def connect(self) -> bool:
         """
-        Launch browser with persistent session.
-
-        On first run: QR code appears, user scans with phone.
-                      Session is saved to .sessions/ automatically.
-        All later runs: session loads silently, no QR needed.
-
-        STEALTH 5: headless=False — WhatsApp Web detects headless.
-                   Viewport 1280×800 — matches a real laptop screen.
-
-        Returns:
-            True if connected and chat list is visible.
-
-        Raises:
-            ConnectionError if connection could not be established.
+        Open browser with a fresh fingerprint.
+        This maintains 100% backward compatibility.
         """
-        # Playwright is imported here (deferred import) so that
-        # modules that don't need the browser (--preview, --dry-run)
-        # don't need Playwright installed just to import this file.
         from playwright.async_api import async_playwright
 
-        self._log.info("Launching browser...")
+        self._log.info("Launching browser with fresh fingerprint...")
         self._sess_path.mkdir(parents=True, exist_ok=True)
         self._ss_path.mkdir(exist_ok=True)
 
-        self._pw = await async_playwright().start()
+        # ── Generate fresh fingerprint ──────────────────────────
+        self._current_fingerprint = self._fingerprint_manager.get_fresh_fingerprint()
+        self._log.info(f"Using fingerprint: {self._current_fingerprint.fingerprint_hash[:8]}")
 
-        # launch_persistent_context = browser + profile in one call.
-        # user_data_dir stores cookies, localStorage, session tokens.
-        # This is what makes the WhatsApp login persist between runs.
+        # ── Launch browser ──────────────────────────────────────
+        self._pw = await async_playwright().start()
+        
         self._ctx = await self._pw.chromium.launch_persistent_context(
             user_data_dir=str(self._sess_path),
-            headless=False,                            # STEALTH 5
-            viewport={"width": 1280, "height": 800},   # STEALTH 5
-            locale="en-US",
-            timezone_id="Africa/Lagos",                # Match Nigeria timezone
+            headless=False,
+            viewport={
+                "width": self._current_fingerprint.screen_width,
+                "height": self._current_fingerprint.screen_height
+            },
+            locale=self._current_fingerprint.language,
+            timezone_id=self._current_fingerprint.timezone,
+            user_agent=self._current_fingerprint.user_agent,
             args=[
                 "--no-sandbox",
-                # Hides the "Chrome is controlled by automated software" banner
-                # and removes the navigator.webdriver=true JS property
-                # that WhatsApp Web could detect
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
+                "--disable-dev-shm-usage",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-sync",
+                "--disable-default-apps",
+                "--disable-translate",
+                "--disable-extensions",
+                "--disable-component-extensions-with-background-pages",
+                "--disable-background-networking",
+                "--safebrowsing-disable-auto-update",
+                "--disable-client-side-phishing-detection",
+                "--disable-component-update",
+                "--disable-domain-reliability",
+                "--no-default-browser-check",
+                "--no-first-run",
+                "--password-store=basic",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-breakpad",
+                "--disable-crash-reporter",
+                "--disable-device-discovery-notifications",
+                "--disable-notifications",
+                "--disable-renderer-backgrounding",
+                "--disable-software-rasterizer",
             ],
         )
 
-        # Use the first existing tab or open a new one
         self._page = (
             self._ctx.pages[0]
             if self._ctx.pages
             else await self._ctx.new_page()
         )
 
-        self._log.info("Navigating to WhatsApp Web...")
+        # ── Inject fingerprint script ──────────────────────────
+        stealth_script = self._fingerprint_manager.generate_stealth_script(
+            self._current_fingerprint
+        )
+        await self._page.add_init_script(stealth_script)
+
+        # ── Navigate with human timing ─────────────────────────
+        await asyncio.sleep(random.uniform(0.5, 2.0))
+        
+        self._log.info("Loading WhatsApp Web...")
         await self._page.goto(
             "https://web.whatsapp.com",
-            wait_until="domcontentloaded"
+            wait_until="domcontentloaded",
+            timeout=30000
         )
 
+        # ── Human behavior after load ──────────────────────────
+        await self._human_idle(2.0, 5.0)
+
+        # ── Wait for QR or chat list ───────────────────────────
         try:
-            # Wait for either the chat list (logged in) or QR code (first run)
             await self._page.wait_for_selector(
                 f"{self.SEL['chat_list']}, {self.SEL['qr_code']}",
-                timeout=30_000   # 30 seconds
+                timeout=self._TIMEOUTS["connect"]
             )
 
-            # Check which element appeared
             chat_list = await self._page.query_selector(self.SEL["chat_list"])
-
-            if chat_list:
-                self._log.info("Session loaded — no QR scan needed.")
+            if chat_list and await chat_list.is_visible():
+                self._log.info("✅ Session loaded. WhatsApp Web is ready.")
+                self._is_initialized = True
+                self._last_state = "chat_list"
+                await self._simulate_human_after_load()
                 return True
 
-            # QR code appeared — guide the user to scan
+            # QR code flow
             print("\n" + "=" * 55)
-            print("  SCAN QR CODE TO LOG IN TO WHATSAPP")
+            print("  SCAN QR CODE TO LOG IN")
             print("=" * 55)
             print("  1. Open WhatsApp on your phone")
-            print("  2. Tap Menu (⋮) → Linked Devices → Link a Device")
-            print("  3. Point your phone camera at the QR code")
-            print("     shown in the browser window that just opened")
-            print("  You have 2 minutes. The session will be saved")
-            print("  automatically — you won't need to scan again.")
+            print("  2. Menu (⋮) → Linked Devices → Link a Device")
+            print("  3. Scan the QR code in the browser window")
+            print("  You have 2 minutes.")
             print("=" * 55 + "\n")
 
-            # Wait up to 2 minutes for the scan to complete
             await self._page.wait_for_selector(
                 self.SEL["chat_list"],
-                timeout=120_000   # 2 minutes
+                timeout=self._TIMEOUTS["qr_scan"]
             )
-            self._log.info("QR scanned. Session saved for future runs.")
+            self._log.info("✅ QR scanned. Session saved.")
+            self._is_initialized = True
+            self._last_state = "chat_list"
+            await self._simulate_human_after_login()
             return True
 
         except Exception as e:
-            raise ConnectionError(
-                f"Could not connect to WhatsApp Web.\n"
-                f"Error: {e}\n"
-                f"Check your internet connection and run --setup again."
-            )
+            self._log.error(f"Connection failed: {e}")
+            await self._cleanup_browser()
+            raise ConnectionError(f"Could not connect to WhatsApp Web: {e}")
+
+    async def rotate_fingerprint(self) -> bool:
+        """
+        Rotate to a new fingerprint and reconnect.
+        Call this if WhatsApp detects you.
+        
+        Returns:
+            bool: True if rotation was successful
+        """
+        self._log.info("🔄 Rotating fingerprint...")
+        
+        try:
+            # Disconnect current session
+            await self.disconnect()
+            
+            # Generate new fingerprint (force new)
+            self._current_fingerprint = self._fingerprint_manager.get_fresh_fingerprint()
+            
+            self._log.info(f"✅ New fingerprint: {self._current_fingerprint.fingerprint_hash[:8]}")
+            
+            # Small delay before reconnecting
+            await asyncio.sleep(random.uniform(2.0, 5.0))
+            
+            # Reconnect with new fingerprint
+            return await self.connect()
+            
+        except Exception as e:
+            self._log.error(f"Fingerprint rotation failed: {e}")
+            return False
 
     async def disconnect(self) -> None:
-        """
-        Close the browser cleanly.
-        CRITICAL: Never delete .sessions/ — it holds the saved login.
-        Always called in a finally block so it runs even on crash.
-        """
+        """Close browser cleanly with proper resource cleanup."""
+        try:
+            if self._page:
+                try:
+                    await self._page.close()
+                except Exception as e:
+                    self._log.debug(f"Page close warning: {e}")
+                self._page = None
+                
+            if self._ctx:
+                try:
+                    await asyncio.wait_for(self._ctx.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self._log.warning("Context close timeout - forcing cleanup")
+                    try:
+                        await self._ctx.stop()
+                    except Exception:
+                        pass
+                except Exception as e:
+                    self._log.debug(f"Context close warning: {e}")
+                self._ctx = None
+                
+            if self._pw:
+                try:
+                    await asyncio.wait_for(self._pw.stop(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self._log.warning("Playwright stop timeout - forcing cleanup")
+                except Exception as e:
+                    self._log.debug(f"Playwright stop warning: {e}")
+                self._pw = None
+                
+            self._is_initialized = False
+            self._log.info("Browser closed cleanly.")
+            
+        except Exception as e:
+            self._log.error(f"Disconnect error: {e}")
+        finally:
+            import gc
+            gc.collect()
+
+    async def is_connected(self) -> bool:
+        """True if WhatsApp chat list is visible."""
+        if not self._page or not self._is_initialized:
+            return False
+        try:
+            return await self._wait_for_selector_with_retry(
+                self.SEL["chat_list"], timeout=2_000
+            )
+        except Exception:
+            return False
+
+    # ═══════════════════════════════════════════════════════════
+    # HUMAN BEHAVIOR SIMULATION
+    # ═══════════════════════════════════════════════════════════
+
+    async def _simulate_human_after_load(self):
+        """Simulate human behavior after WhatsApp loads."""
+        self._log.debug("Simulating human behavior after loading...")
+        
+        await self._human_idle(3.0, 8.0)
+        
+        for _ in range(random.randint(2, 5)):
+            await self._mouse_human_to(
+                random.randint(100, 1100),
+                random.randint(100, 700)
+            )
+            await self._human_pause(0.5, 2.0)
+        
+        for _ in range(random.randint(1, 3)):
+            if random.random() < 0.4:
+                await self._scroll_natural("down", random.randint(200, 500))
+                await self._human_pause(0.5, 1.5)
+        
+        if random.random() < 0.3:
+            await self._page.mouse.move(
+                random.randint(900, 1100),
+                random.randint(50, 150)
+            )
+            await self._human_pause(0.5, 1.5)
+        
+        if random.random() < 0.2:
+            await self._simulate_tab_switching()
+        
+        await self._human_idle(1.0, 4.0)
+        self._log.debug("Human behavior simulation complete.")
+
+    async def _simulate_human_after_login(self):
+        """Simulate human behavior after QR scan."""
+        await self._simulate_human_after_load()
+        await self._human_pause(2.0, 5.0)
+        
+        try:
+            unread = await self._page.query_selector('span[data-icon="unread-count"]')
+            if unread:
+                await self._human_pause(1.0, 3.0)
+        except Exception:
+            pass
+
+    async def _human_idle(self, min_sec: float = 1.0, max_sec: float = 5.0):
+        """Idle with occasional mouse movement."""
+        total_time = random.uniform(min_sec, max_sec)
+        elapsed = 0
+        
+        while elapsed < total_time:
+            if random.random() < 0.1:
+                await self._mouse_human_to(
+                    random.randint(100, 1100),
+                    random.randint(100, 700)
+                )
+            
+            wait_time = random.uniform(0.5, 2.0)
+            await asyncio.sleep(min(wait_time, total_time - elapsed))
+            elapsed += wait_time
+
+    async def _simulate_natural_hesitation(self):
+        """Simulate human hesitation before actions."""
+        if random.random() < 0.3:
+            await self._human_pause(0.5, 2.0)
+            await self._mouse_human_to(
+                random.randint(800, 1200),
+                random.randint(100, 400)
+            )
+            await self._human_pause(0.3, 1.0)
+            await self._mouse_human_to(
+                random.randint(300, 900),
+                random.randint(300, 500)
+            )
+            await self._human_pause(0.2, 0.8)
+
+    # ═══════════════════════════════════════════════════════════
+    # STATE VALIDATION
+    # ═══════════════════════════════════════════════════════════
+
+    async def _ensure_page_state(self, expected_state: str = "chat_list") -> bool:
+        """Validate that the page is in the expected state."""
+        if not self._page or not self._is_initialized:
+            return False
+        try:
+            selector = self.SEL["chat_list"] if expected_state == "chat_list" else self.MSG_INPUT_SELS[0]
+            return await self._wait_for_selector_with_retry(selector, timeout=3_000)
+        except Exception:
+            return False
+
+    async def _wait_for_selector_with_retry(self, selector: str, timeout: int = 5_000, retries: int = 2) -> bool:
+        """Wait for selector with retry logic."""
+        for attempt in range(retries + 1):
+            try:
+                element = await self._page.wait_for_selector(
+                    selector, timeout=timeout // (attempt + 1)
+                )
+                if element and await element.is_visible():
+                    return True
+            except Exception:
+                if attempt == retries:
+                    return False
+                await asyncio.sleep(0.5 * (attempt + 1))
+        return False
+
+    async def _cleanup_browser(self) -> None:
+        """Clean up browser resources."""
         try:
             if self._ctx:
                 await self._ctx.close()
             if self._pw:
                 await self._pw.stop()
-            self._log.info("Browser closed cleanly.")
-        except Exception as e:
-            self._log.error(f"Error during disconnect: {e}")
+        except Exception:
+            pass
+        finally:
+            self._pw = None
+            self._ctx = None
+            self._page = None
+            self._is_initialized = False
 
-    async def is_connected(self) -> bool:
-        """
-        Check if the WhatsApp session is still alive.
-        Called by Scheduler at the start of each session.
-        If False: Scheduler attempts to reconnect before proceeding.
-        """
+    # ═══════════════════════════════════════════════════════════
+    # BASIC HUMAN BEHAVIOR HELPERS
+    # ═══════════════════════════════════════════════════════════
+
+    async def _human_pause(self, min_sec: float = 0.5, max_sec: float = 2.0) -> None:
+        """Random pause to simulate human behavior."""
+        pause = random.uniform(min_sec, max_sec)
+        await asyncio.sleep(pause)
+
+    async def _simulate_reading(self, message: str) -> None:
+        """Simulate reading a message before responding."""
+        words = len(message.split())
+        read_time = max(0.5, (words / 250) * 60)
+        await self._human_pause(read_time * 0.8, read_time * 1.2)
+
+    async def _simulate_tab_switching(self) -> None:
+        """Simulate switching to other tabs like a human."""
+        if random.random() < 0.08:
+            await self._human_pause(1.0, 4.0)
+            await self._page.keyboard.press("Control+Tab")
+            await self._human_pause(0.5, 2.0)
+            await self._page.keyboard.press("Control+Tab")
+            await self._human_pause(0.3, 1.0)
+
+    # FIXED: Added delta_x=0 parameter
+    async def _scroll_natural(self, direction: str = "down", distance: int = None) -> None:
+        """Natural scrolling with random speed and distance."""
+        if distance is None:
+            distance = random.randint(150, 600)
+        steps = random.randint(3, 10)
+        step_distance = distance // steps
+        for _ in range(steps):
+            speed = random.uniform(0.1, 0.3)
+            if direction == "down":
+                await self._page.mouse.wheel(delta_x=0, delta_y=step_distance)
+            else:
+                await self._page.mouse.wheel(delta_x=0, delta_y=-step_distance)
+            await asyncio.sleep(speed)
+        await self._human_pause(0.1, 0.3)
+
+    async def _mouse_human_to(self, tx: int, ty: int) -> None:
+        """Enhanced human-like mouse movement with natural curve."""
+        waypoints = random.randint(2, 4)
+        for _ in range(waypoints):
+            mx = max(50, min(1230, tx + random.randint(-200, 200)))
+            my = max(50, min(750, ty + random.randint(-150, 150)))
+            await self._page.mouse.move(mx, my)
+            await self._human_pause(0.2, 0.8)
+        await self._page.mouse.move(tx, ty)
+        await self._human_pause(0.05, 0.15)
+
+    def _reset_daily_count_if_needed(self) -> None:
+        """Reset daily message count if it's a new day."""
+        today = datetime.now().date()
+        if self._session_activity["last_daily_reset"] != today:
+            self._session_activity["daily_count"] = 0
+            self._session_activity["last_daily_reset"] = today
+            self._log.debug("Daily message count reset.")
+
+    async def _manage_session_activity(self) -> bool:
+        """Track and manage session activity to avoid patterns."""
+        self._reset_daily_count_if_needed()
+        
+        if self._session_activity["daily_count"] >= self._HUMAN_BEHAVIOR["daily_message_limit"]:
+            self._log.warning(f"⚠ Daily message limit reached: {self._session_activity['daily_count']}")
+            return False
+        
+        now = datetime.now()
+        active_time = (now - self._session_activity["session_start"]).total_seconds()
+        
+        if active_time > random.randint(
+            self._HUMAN_BEHAVIOR["session_break_after"] - 300,
+            self._HUMAN_BEHAVIOR["session_break_after"] + 300
+        ):
+            break_time = random.randint(
+                self._HUMAN_BEHAVIOR["session_break_duration"],
+                self._HUMAN_BEHAVIOR["session_break_duration"] * 2
+            )
+            self._log.info(f"🌴 Taking natural break: {break_time//60} minutes")
+            await asyncio.sleep(break_time)
+            self._session_activity["session_start"] = now
+            self._session_activity["active_time"] = 0
+        
+        if self._session_activity["messages_sent"] > 0:
+            wait_time = random.uniform(
+                self._HUMAN_BEHAVIOR["inter_message_delay_min"],
+                self._HUMAN_BEHAVIOR["inter_message_delay_max"]
+            )
+            self._log.debug(f"Natural pause between messages: {wait_time:.1f}s")
+            await asyncio.sleep(wait_time)
+        
+        self._session_activity["messages_sent"] += 1
+        self._session_activity["daily_count"] += 1
+        self._session_activity["last_activity"] = now
+        return True
+
+    # ═══════════════════════════════════════════════════════════
+    # CHAT NAVIGATION (NO PAGE.GOTO)
+    # ═══════════════════════════════════════════════════════════
+
+    async def _return_to_chat_list(self) -> bool:
+        """Return to chat list using ESC key (SPA-native)."""
         try:
-            if not self._page:
+            if await self._ensure_page_state("chat_list"):
+                self._last_state = "chat_list"
+                return True
+
+            for attempt in range(3):
+                await self._page.keyboard.press("Escape")
+                await self._human_pause(0.3, 0.6)
+                if await self._ensure_page_state("chat_list"):
+                    self._last_state = "chat_list"
+                    self._log.debug("Returned to chat list via ESC.")
+                    return True
+
+            for back_sel in [
+                'div[data-testid="chat-back-button"]',
+                'button[aria-label="Back"]',
+                'span[data-icon="back"]'
+            ]:
+                try:
+                    back_el = await self._page.query_selector(back_sel)
+                    if back_el and await back_el.is_visible():
+                        await back_el.click()
+                        await self._human_pause(0.3, 0.7)
+                        if await self._ensure_page_state("chat_list"):
+                            self._last_state = "chat_list"
+                            self._log.debug("Returned to chat list via back button.")
+                            return True
+                except Exception:
+                    continue
+
+            self._log.warning("Could not return to chat list.")
+            return False
+        except Exception as e:
+            self._log.debug(f"_return_to_chat_list error: {e}")
+            return False
+
+    async def _focus_search_bar(self) -> bool:
+        """Focus the search bar."""
+        try:
+            search_el = await self._page.wait_for_selector(
+                self.SEARCH_SEL, timeout=self._TIMEOUTS["search_bar"]
+            )
+            if not search_el or not await search_el.is_visible():
                 return False
-            el = await self._page.query_selector(self.SEL["chat_list"])
-            return el is not None
+
+            box = await search_el.bounding_box()
+            if box:
+                cx = int(box["x"] + box["width"] / 2)
+                cy = int(box["y"] + box["height"] / 2)
+                await self._mouse_human_to(cx, cy)
+
+            await search_el.click()
+            await self._human_pause(0.2, 0.5)
+            return True
         except Exception:
             return False
 
-    # ── STEALTH HELPERS ────────────────────────────────────────
+    async def _type_phone_number(self, phone: str) -> None:
+        """Type phone number with human-like chunking."""
+        await self._page.keyboard.press("Control+a")
+        await self._human_pause(0.05, 0.15)
+        await self._page.keyboard.press("Delete")
+        await self._human_pause(0.1, 0.3)
 
-    async def _rotate_tab(self):
-        """
-        STEALTH 8: Navigate home after N messages to reset session patterns.
+        chunks = [phone[:3], phone[3:6], phone[6:9], phone[9:]]
+        for i, chunk in enumerate(chunks):
+            if chunk:
+                for digit in chunk:
+                    delay = random.uniform(80, 350)
+                    await self._page.keyboard.type(digit, delay=delay)
+                if i < len(chunks) - 1 and chunks[i + 1]:
+                    await self._human_pause(0.1, 0.3)
 
-        WhatsApp's browser-side code tracks navigation patterns.
-        Sending message after message to different URLs in a tight
-        loop looks different from normal browsing behaviour.
-        Navigating home and pausing resets this accumulated pattern.
+    async def _click_search_result(self, phone: str) -> bool:
+        """Click the search result for the given phone number."""
+        await self._human_pause(1.0, 2.5)
+        await self._human_pause(0.2, 0.6)
 
-        N (self._rotate_after) is randomized per cycle so the
-        rotation itself doesn't happen at a predictable interval.
-        """
-        if self._msgs_on_tab >= self._rotate_after:
-            self._log.info(
-                f"Tab rotation after {self._msgs_on_tab} messages — "
-                f"resetting session pattern..."
-            )
-            await self._page.goto(
-                "https://web.whatsapp.com",
-                wait_until="domcontentloaded"
-            )
-            # Pause as if the user is looking at their chat list
-            await asyncio.sleep(random.uniform(3, 6))
+        result_sels = [
+            f'span[title="+{phone}"]',
+            f'span[title="{phone}"]',
+            f'span[title*="{phone[-10:]}"]',
+            'div[data-testid="cell-frame-container"]:first-child',
+            'div[data-testid="list-item-0"]',
+            'div[role="option"]:first-child',
+            'div[role="listitem"]:first-child',
+        ]
 
-            # Reset counters — new threshold is random (8–12)
-            self._msgs_on_tab  = 0
-            self._rotate_after = random.randint(8, 12)
-            self._log.debug(
-                f"Tab rotated. Next rotation after {self._rotate_after} messages."
-            )
+        for sel in result_sels:
+            try:
+                el = await self._page.query_selector(sel)
+                if el and await el.is_visible():
+                    box = await el.bounding_box()
+                    if box:
+                        cx = int(box["x"] + box["width"] / 2)
+                        cy = int(box["y"] + box["height"] / 2)
+                        await self._mouse_human_to(cx, cy)
+                    await el.click()
+                    self._log.debug(f"Result clicked: {sel}")
+                    return True
+            except Exception:
+                continue
 
-    async def _mouse_human_to(self, target_x: int, target_y: int):
-        """
-        STEALTH 3: Move mouse via a random intermediate position.
+        await self._page.keyboard.press("Enter")
+        self._log.debug("Pressed Enter to open top result")
+        return True
 
-        Human mouse movement is never a straight teleport.
-        We move to a random point first, pause, then move to target.
-        This prevents the cursor jumping directly to an input element
-        which is a detectable bot pattern.
+    async def _open_chat(self, phone: str) -> Tuple[bool, str, str]:
+        """Open a chat using search bar. No page.goto()."""
+        if not await self._return_to_chat_list():
+            return False, "", "Failed to return to chat list"
+        
+        await self._human_pause(0.8, 1.8)
 
-        Args:
-            target_x: Final x coordinate (center of target element)
-            target_y: Final y coordinate (center of target element)
-        """
-        # Random intermediate point anywhere on the visible page
-        mid_x = random.randint(150, 1100)
-        mid_y = random.randint(80,  650)
+        if not await self._focus_search_bar():
+            return False, "", "Search bar not found"
 
-        await self._page.mouse.move(mid_x, mid_y)
-        await asyncio.sleep(random.uniform(0.3, 0.8))   # Natural pause
-        await self._page.mouse.move(target_x, target_y)
-        await asyncio.sleep(random.uniform(0.1, 0.3))   # Settle on target
+        await self._type_phone_number(phone)
 
-    async def _type_human(self, selector: str, message: str):
-        """
-        STEALTH 1 + STEALTH 6: Type message exactly like a human.
+        if not await self._click_search_result(phone):
+            return False, "", "Failed to click search result"
 
-        Text segments: typed character-by-character with random ms delay.
-        Emoji segments: injected via JavaScript to prevent garbled chars.
-        Long messages: occasional mid-message thinking pause.
+        await self._human_pause(0.8, 1.5)
+        await self._handle_new_chat_modal()
+        await self._human_pause(0.5, 1.0)
 
-        WHY page.type() AND NOT page.fill():
-            page.fill() sets the input value directly in the DOM.
-            It fires NO keyboard events (keydown, keypress, keyup).
-            WhatsApp Web uses keyboard events to detect typing.
-            Absence of keyboard events = detectable bot pattern.
+        try:
+            msg_sel = await self._find_msg_input(timeout_ms=self._TIMEOUTS["msg_input"])
+            self._last_state = "chat_open"
+            return True, msg_sel, ""
+        except TimeoutError as e:
+            if await self._check_invalid_number():
+                return False, "", "INVALID_NUMBER"
+            if await self._check_account_restricted():
+                return False, "", "RESTRICTED"
+            await self._save_debug_screenshot()
+            return False, "", str(e)
 
-            page.type() fires real keyboard events per character.
-            With a random delay between each character, the event
-            timing is statistically identical to a human typing.
+    async def _handle_new_chat_modal(self) -> None:
+        """Handle the new chat modal if it appears."""
+        await self._human_pause(0.4, 0.8)
+        for sel in [
+            'div[data-animate-modal-body="true"] button',
+            'div[role="dialog"] button',
+            'div[data-testid="popup-contents"] button',
+        ]:
+            try:
+                modal_el = await self._page.query_selector(sel)
+                if modal_el and await modal_el.is_visible():
+                    btn_text = (await modal_el.inner_text()).lower().strip()
+                    if any(w in btn_text for w in ["message", "chat", "ok", "open", "start"]):
+                        await self._human_pause(0.2, 0.5)
+                        await modal_el.click()
+                        self._log.debug(f"Modal: '{btn_text}'")
+                        await self._human_pause(0.5, 1.0)
+                        break
+            except Exception:
+                continue
 
-        Args:
-            selector: CSS selector of the message input element.
-            message:  The full message string to type.
-        """
-        # ── Split message into text and emoji segments ──────────
-        # Emoji are multi-byte Unicode characters. page.type() can
-        # garble them on some OS/keyboard combinations. We handle
-        # them separately via JavaScript injection (STEALTH 6).
-        emoji_re = re.compile(
-            "["
-            "\U0001F600-\U0001F64F"   # Emoticons (😊👋🙏)
-            "\U0001F300-\U0001F5FF"   # Symbols & pictographs
-            "\U0001F680-\U0001F6FF"   # Transport & map symbols
-            "\U0001F1E0-\U0001F1FF"   # Country flags
-            "\U00002702-\U000027B0"   # Dingbats (✂)
-            "\U000024C2-\U0001F251"   # Enclosed characters
-            "\U0001f926-\U0001f937"   # Supplemental symbols (🤷)
-            "\U00010000-\U0010ffff"   # Other emoji
-            "\u2640-\u2642"           # Gender symbols
-            "\u2600-\u2B55"           # Misc (☀🔴)
-            "\u200d"                  # Zero-width joiner (compound emoji)
-            "\ufe0f"                  # Variation selector
-            "]+",
-            flags=re.UNICODE
-        )
+    async def _save_debug_screenshot(self) -> None:
+        """Save a debug screenshot."""
+        try:
+            debug = self._ss_path / f"debug_{datetime.now().strftime('%H%M%S')}.png"
+            await self._page.screenshot(path=str(debug))
+            self._log.warning(f"Debug screenshot: {debug}")
+        except Exception:
+            pass
 
-        # Build list of (type, content) tuples in message order
-        text_parts  = emoji_re.split(message)
-        emoji_parts = emoji_re.findall(message)
-        segments    = []
-        for i, text in enumerate(text_parts):
-            if text:
-                segments.append(("text", text))
-            if i < len(emoji_parts):
-                segments.append(("emoji", emoji_parts[i]))
+    async def _find_msg_input(self, timeout_ms: int = 15_000) -> str:
+        """Find the message compose box."""
+        start = asyncio.get_event_loop().time()
+        deadline = start + (timeout_ms / 1000)
 
-        d          = self._cfg.delays
-        char_count = 0
-
-        for kind, content in segments:
-
-            if kind == "text":
-                # ── STEALTH 1: Type character by character ──────
-                for char in content:
-                    await self._page.type(
-                        selector,
-                        char,
-                        delay=random.uniform(
-                            d.type_speed_min,
-                            d.type_speed_max
-                        )
-                    )
-                    char_count += 1
-
-                    # Mid-message thinking pause for longer messages.
-                    # A real person sometimes pauses to think about
-                    # phrasing mid-sentence. We simulate that here.
-                    if (
-                        len(message) > 80
-                        and char_count % random.randint(40, 60) == 0
-                    ):
-                        await asyncio.sleep(random.uniform(0.8, 2.0))
-
-            elif kind == "emoji":
-                # ── STEALTH 6: Inject emoji via JavaScript ───────
-                # This inserts the emoji at the current cursor position
-                # in the WhatsApp input box without using keyboard events.
-                # A separate input event is dispatched so WhatsApp
-                # registers the change and enables the send button.
+        while asyncio.get_event_loop().time() < deadline:
+            for sel in self.MSG_INPUT_SELS:
                 try:
-                    await self._page.evaluate(
-                        """(args) => {
-                            const el = document.querySelector(args.selector);
-                            if (!el) return;
-                            const sel = window.getSelection();
-                            if (!sel || !sel.rangeCount) return;
-                            const range = sel.getRangeAt(0);
-                            const node  = document.createTextNode(args.emoji);
-                            range.insertNode(node);
-                            range.setStartAfter(node);
-                            range.setEndAfter(node);
-                            sel.removeAllRanges();
-                            sel.addRange(range);
-                            // Tell WhatsApp the content changed
-                            el.dispatchEvent(
-                                new Event('input', { bubbles: true })
-                            );
-                        }""",
-                        {"selector": selector, "emoji": content}
-                    )
-                    await asyncio.sleep(random.uniform(0.05, 0.2))
+                    if await self._wait_for_selector_with_retry(sel, timeout=500):
+                        self._log.debug(f"Message input: {sel}")
+                        return sel
                 except Exception:
-                    # Fallback: try typing directly
-                    # May garble on some systems but better than crashing
-                    self._log.debug(f"JS emoji injection failed — falling back to type()")
-                    await self._page.type(selector, content, delay=50)
+                    continue
+            await asyncio.sleep(0.5)
+
+        raise TimeoutError(f"Message input not found after {timeout_ms}ms.")
+
+    # ═══════════════════════════════════════════════════════════
+    # ENHANCED TYPING WITH HUMAN BEHAVIOR
+    # ═══════════════════════════════════════════════════════════
+
+    async def _type_human_with_mistakes(self, selector: str, message: str) -> None:
+        """Enhanced typing with more human-like behavior."""
+        try:
+            await self._page.click(selector)
+            await self._human_pause(0.2, 0.6)
+        except Exception:
+            pass
+        
+        words = message.split()
+        for i, word in enumerate(words):
+            for char in word:
+                await self._type_char_natural(char)
+            
+            if i < len(words) - 1:
+                await self._human_pause(0.05, 0.15)
+            
+            if random.random() < 0.08:
+                await self._human_pause(0.3, 1.2)
+            
+            if random.random() < 0.05 and len(word) > 3:
+                await self._page.keyboard.press("Backspace")
+                await self._human_pause(0.1, 0.3)
+                await self._type_char_natural(word[-1])
+        
+        await self._human_pause(0.3, 1.0)
+
+    async def _type_char_natural(self, char: str) -> None:
+        """Type a character with natural variations including mistakes."""
+        mistake_rate = 0.025
+        delay = random.uniform(80, 450)
+        
+        if random.random() < mistake_rate and char != " " and char.isalpha():
+            wrong_char = random.choice("abcdefghijklmnopqrstuvwxyz")
+            await self._page.keyboard.type(wrong_char, delay=delay)
+            await self._human_pause(0.08, 0.25)
+            await self._page.keyboard.press("Backspace")
+            await self._human_pause(0.05, 0.15)
+        
+        await self._page.keyboard.type(char, delay=delay)
+        if char == " ":
+            await self._human_pause(0.05, 0.15)
+
+    async def _inject_emoji(self, selector: str, emoji: str) -> None:
+        """Inject emoji using JavaScript."""
+        try:
+            await self._page.evaluate(
+                """(args) => {
+                    const el = document.querySelector(args.selector);
+                    if (!el) return;
+                    const sel = window.getSelection();
+                    if (!sel || !sel.rangeCount) return;
+                    const range = sel.getRangeAt(0);
+                    const node = document.createTextNode(args.emoji);
+                    range.insertNode(node);
+                    range.setStartAfter(node);
+                    range.setEndAfter(node);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                }""",
+                {"selector": selector, "emoji": emoji}
+            )
+            await self._human_pause(0.05, 0.15)
+        except Exception:
+            await self._page.keyboard.type(emoji)
+
+    # ═══════════════════════════════════════════════════════════
+    # CHECKS AND HELPERS
+    # ═══════════════════════════════════════════════════════════
 
     async def _check_invalid_number(self) -> bool:
-        """
-        Check if WhatsApp is showing an 'invalid/unregistered number' modal.
-
-        After navigating to a chat URL, WhatsApp Web may show a modal
-        with text like "Phone number shared via url is invalid" if the
-        number is not registered. We check for these strings in the
-        page body before attempting to type anything.
-
-        Returns:
-            True  → number is NOT on WhatsApp, mark INVALID_NUMBER
-            False → number appears valid, proceed with sending
-        """
+        """True if WhatsApp shows 'number not registered'."""
         try:
-            body_text = (await self._page.inner_text("body")).lower()
-            return any(pattern in body_text for pattern in self.INVALID_TEXTS)
+            body = (await self._page.inner_text("body")).lower()
+            return any(p in body for p in self.INVALID_TEXTS)
         except Exception:
-            # If we can't read the body, assume valid and let send fail naturally
             return False
 
-    async def _take_screenshot(self, order_id: str) -> str:
-        """
-        Capture a screenshot of the browser at the moment of delivery.
-        Saved as: screenshots/{order_id}_{timestamp}.png
-
-        This gives you visual proof that each message was sent,
-        showing the message in the chat with the delivery tick.
-
-        Args:
-            order_id: Used in the filename so screenshots are traceable.
-
-        Returns:
-            Path string to the saved screenshot, or "" on failure.
-        """
+    async def _check_account_restricted(self) -> bool:
+        """True if WhatsApp shows restriction banner."""
         try:
-            ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # Sanitize order_id — remove characters invalid in filenames
-            safe_id  = re.sub(r"[^\w\-]", "_", str(order_id))
-            filename = f"{safe_id}_{ts}.png"
-            path     = self._ss_path / filename
+            body = (await self._page.inner_text("body")).lower()
+            signals = [
+                "linked devices is restricted",
+                "can't start new chats right now",
+                "account on linked devices is restricted",
+            ]
+            return any(s in body for s in signals)
+        except Exception:
+            return False
 
-            await self._page.screenshot(
-                path=str(path),
-                full_page=False   # Capture viewport only, not full page
-            )
-            self._log.debug(f"Screenshot saved: {path}")
+    async def _check_campaign_in_history(self, history_depth: int = 4) -> Tuple[bool, str]:
+        """Read last N outgoing messages for campaign keywords."""
+        await self._human_pause(0.8, 1.5)
+        outgoing = []
+        for sel in [self.SEL["outgoing_msgs"], self.SEL["outgoing_alt"]]:
+            try:
+                els = await self._page.query_selector_all(sel)
+                if els:
+                    for el in els[-history_depth:]:
+                        try:
+                            t = (await el.inner_text()).strip()
+                            if t:
+                                outgoing.append(t)
+                        except Exception:
+                            continue
+                if outgoing:
+                    break
+            except Exception:
+                continue
+
+        if not outgoing:
+            return False, ""
+
+        for msg in outgoing:
+            msg_l = msg.lower()
+            for kw in self.CAMPAIGN_KEYWORDS:
+                if kw.lower() in msg_l:
+                    preview = msg[:80] + "..." if len(msg) > 80 else msg
+                    self._log.info(f"⚠ Campaign keyword '{kw}' in history")
+                    return True, preview
+        return False, ""
+
+    async def _take_screenshot(self, order_id: str) -> str:
+        """Save screenshot to screenshots/."""
+        try:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_id = re.sub(r"[^\w\-]", "_", str(order_id))
+            path = self._ss_path / f"{safe_id}_{ts}.png"
+            await self._page.screenshot(path=str(path), full_page=False)
             return str(path)
         except Exception as e:
             self._log.warning(f"Screenshot failed: {e}")
             return ""
 
-    # ── SEND METHODS ───────────────────────────────────────────
+    async def _wait_for_delivery_tick(self) -> None:
+        """Wait for delivery tick with human-like patience."""
+        try:
+            await self._human_pause(0.5, 2.0)
+            tick_found = await self._page.query_selector(self.SEL["sent_tick"])
+            if tick_found:
+                self._log.debug("✓ Delivery confirmed.")
+                return
 
-    async def send_text(
-        self,
-        phone:    str,
-        message:  str,
-        order_id: str
-    ) -> SendResult:
-        """
-        Send a text message to one WhatsApp number.
-        Applies all 8 stealth techniques in order.
+            for attempt in range(3):
+                await self._human_pause(1.0, 3.0)
+                tick_found = await self._page.query_selector(self.SEL["sent_tick"])
+                if tick_found:
+                    self._log.debug("✓ Delivery confirmed.")
+                    return
 
-        Flow:
-          1. Tab rotation check         (STEALTH 8)
-          2. Navigate to chat URL       (STEALTH 4 — no ?text=)
-          3. Wait for chat to load
-          4. Check for invalid number modal
-          5. Pre-typing pause           (STEALTH 2)
-          6. Occasional scroll          (STEALTH 7)
-          7. Human mouse to input       (STEALTH 3)
-          8. Click input, type message  (STEALTH 1 + 6)
-          9. Press Enter
-         10. Wait for delivery tick
-         11. Screenshot for proof
-         12. Return SendResult
+            self._log.warning("⚠ Tick timeout — likely delivered")
+        except Exception:
+            self._log.warning("⚠ Tick timeout — likely delivered")
 
-        Args:
-            phone:    13-digit normalized phone e.g. "2348038365784"
-            message:  Full rendered message string
-            order_id: For logging and screenshot naming
+    def _handle_open_chat_error(self, error: str, phone: str) -> SendResult:
+        """Handle errors from _open_chat."""
+        if error == "INVALID_NUMBER":
+            self._log.info(f"✗ Not on WhatsApp: +{phone}")
+            return SendResult(
+                success=False,
+                status="INVALID_NUMBER",
+                error_message="Phone not registered on WhatsApp"
+            )
+        if error == "RESTRICTED":
+            self._log.warning("Account restricted — stopping.")
+            return SendResult(
+                success=False,
+                status="FAILED",
+                error_message="Account temporarily restricted. Wait 24-48 hours."
+            )
+        return SendResult(
+            success=False,
+            status="FAILED",
+            error_message=error
+        )
 
-        Returns:
-            SendResult with status SENT | FAILED | INVALID_NUMBER
-        """
+    # ═══════════════════════════════════════════════════════════
+    # MAIN SEND METHODS (BACKWARD COMPATIBLE)
+    # ═══════════════════════════════════════════════════════════
+
+    async def send_text(self, phone: str, message: str, order_id: str) -> SendResult:
+        """Send text message with full human emulation."""
         self._log.info(f"→ Sending to +{phone} [Order: {order_id}]")
 
         try:
-            # ── STEALTH 8: Rotate tab if threshold reached ──────
-            await self._rotate_tab()
-
-            # ── STEALTH 4: Navigate WITHOUT ?text= parameter ────
-            # Clean URL — no pre-filled text
-            url = f"https://web.whatsapp.com/send?phone={phone}"
-            await self._page.goto(
-                url,
-                wait_until="domcontentloaded",
-                timeout=20_000
-            )
-
-            # Wait for the message input to appear (chat loaded)
-            try:
-                await self._page.wait_for_selector(
-                    self.SEL["msg_input"],
-                    timeout=15_000
-                )
-            except Exception:
-                # Input didn't appear — check if it's an invalid number
-                if await self._check_invalid_number():
-                    self._log.info(f"  ✗ Not on WhatsApp: +{phone}")
-                    return SendResult(
-                        success=False,
-                        status="INVALID_NUMBER",
-                        error_message="Phone not registered on WhatsApp"
-                    )
-                # Genuine timeout — not invalid number, just slow load
-                raise TimeoutError(
-                    f"Chat did not load within 15s for +{phone}"
+            if not await self._manage_session_activity():
+                return SendResult(
+                    success=False,
+                    status="FAILED",
+                    error_message="Daily message limit reached. Try again tomorrow."
                 )
 
-            # Double-check for invalid number after load
-            # (modal sometimes appears after the input is visible)
+            await self._simulate_tab_switching()
+            
+            if random.random() < 0.2:
+                await self._scroll_natural("down", random.randint(100, 300))
+                await self._human_pause(0.5, 1.5)
+
+            success, msg_sel, error = await self._open_chat(phone)
+            if not success:
+                return self._handle_open_chat_error(error, phone)
+
+            if await self._check_account_restricted():
+                return SendResult(
+                    success=False,
+                    status="FAILED",
+                    error_message="Account temporarily restricted."
+                )
+
             if await self._check_invalid_number():
-                self._log.info(f"  ✗ Not on WhatsApp: +{phone}")
+                self._log.info(f"✗ Not on WhatsApp: +{phone}")
                 return SendResult(
                     success=False,
                     status="INVALID_NUMBER",
                     error_message="Phone not registered on WhatsApp"
                 )
 
-            # ── STEALTH 2: Pre-typing pause ─────────────────────
-            # Simulate the user reading the chat before replying
-            pre_pause = random.uniform(
-                self._cfg.delays.pre_type_min,
-                self._cfg.delays.pre_type_max
-            )
-            self._log.debug(f"  Pre-type pause: {pre_pause:.1f}s")
-            await asyncio.sleep(pre_pause)
+            if random.random() < 0.3:
+                await self._scroll_natural("down", random.randint(100, 400))
+                await self._human_pause(0.5, 1.5)
+                await self._scroll_natural("up", random.randint(100, 400))
+                await self._human_pause(0.5, 1.0)
 
-            # ── STEALTH 7: Occasional random scroll ─────────────
-            # Simulate glancing at previous messages before typing
-            if random.choice([True, False]):
-                scroll_up = random.uniform(100, 400)
-                await self._page.evaluate(f"window.scrollBy(0, -{scroll_up})")
-                await asyncio.sleep(random.uniform(0.5, 1.5))
-                await self._page.evaluate("window.scrollBy(0, 10000)")
-                await asyncio.sleep(random.uniform(0.3, 0.8))
+            already, preview = await self._check_campaign_in_history(4)
+            if already:
+                self._log.info("↩ Skipped — campaign in history")
+                return SendResult(
+                    success=False,
+                    status="ALREADY_CONTACTED",
+                    error_message=f"Previous campaign: '{preview}'"
+                )
 
-            # ── STEALTH 3: Human mouse movement ─────────────────
-            # Move to a random position first, then to the input box
-            el = await self._page.query_selector(self.SEL["msg_input"])
-            if el:
-                box = await el.bounding_box()
-                if box:
-                    center_x = int(box["x"] + box["width"]  / 2)
-                    center_y = int(box["y"] + box["height"] / 2)
-                    await self._mouse_human_to(center_x, center_y)
+            await self._simulate_reading(message)
+            await self._simulate_natural_hesitation()
+            await self._type_human_with_mistakes(msg_sel, message)
 
-            # Click the input to focus it
-            await self._page.click(self.SEL["msg_input"])
-            await asyncio.sleep(random.uniform(0.2, 0.5))
+            if random.random() < 0.2:
+                await self._human_pause(0.5, 1.5)
+                await self._page.mouse.move(
+                    random.randint(300, 800),
+                    random.randint(300, 500)
+                )
+                await self._human_pause(0.5, 1.0)
 
-            # ── STEALTH 1 + 6: Type message ─────────────────────
-            await self._type_human(self.SEL["msg_input"], message)
+            if random.random() < 0.4:
+                await self._human_pause(0.5, 2.0)
+                await self._mouse_human_to(
+                    random.randint(600, 1100),
+                    random.randint(200, 500)
+                )
+                await self._human_pause(0.3, 0.8)
 
-            # Small pause after finishing typing — human habit
-            await asyncio.sleep(random.uniform(0.3, 0.8))
-
-            # Press Enter to send
             await self._page.keyboard.press("Enter")
-            self._log.debug("  Message sent. Waiting for delivery tick...")
+            self._log.debug("Sent. Waiting for tick...")
+            await self._wait_for_delivery_tick()
 
-            # Wait for send confirmation tick
-            # Single tick (msg-check) = delivered to WhatsApp server
-            # Double tick (msg-dblcheck) = delivered to recipient's phone
-            # Either is sufficient confirmation — we don't wait for blue ticks
-            try:
-                await self._page.wait_for_selector(
-                    self.SEL["sent_tick"],
-                    timeout=15_000
-                )
-                self._log.info(f"  ✓ Delivered: +{phone}")
-            except Exception:
-                # Tick didn't appear within 15s.
-                # Message was likely sent but we couldn't confirm.
-                # Mark as SENT anyway — better than a false FAILED.
-                self._log.warning(
-                    f"  ⚠ Tick timeout for +{phone} — "
-                    f"message likely delivered (unconfirmed)"
-                )
+            await self._human_pause(0.5, 1.5)
+            if random.random() < 0.2:
+                await self._scroll_natural("up", random.randint(50, 150))
+                await self._human_pause(0.3, 0.8)
+                await self._scroll_natural("down", random.randint(50, 150))
 
-            # Screenshot for delivery proof
-            screenshot_path = await self._take_screenshot(order_id)
+            if random.random() < 0.15:
+                await self._human_pause(2.0, 5.0)
+                await self._return_to_chat_list()
+                await self._human_pause(1.0, 3.0)
 
-            # Increment tab message counter (for STEALTH 8)
-            self._msgs_on_tab += 1
+            ss = await self._take_screenshot(order_id)
+            self._sends_this_session += 1
 
             return SendResult(
                 success=True,
                 status="SENT",
-                screenshot_path=screenshot_path
+                screenshot_path=ss
             )
 
         except Exception as e:
-            self._log.error(
-                f"  ✗ Failed for +{phone}: {e}",
-                exc_info=True
-            )
+            self._log.error(f"✗ Failed +{phone}: {e}", exc_info=True)
             return SendResult(
                 success=False,
                 status="FAILED",
@@ -601,56 +1026,27 @@ class PlaywrightSender(WhatsAppSender):
 
     async def send_image(
         self,
-        phone:      str,
+        phone: str,
         image_path: str,
-        caption:    str,
-        order_id:   str
+        caption: str,
+        order_id: str
     ) -> SendResult:
-        """
-        Send an image with a caption to one WhatsApp number.
-        Used when cfg.image_path is configured in config.py.
-
-        Flow:
-          1. Navigate to chat (same as send_text)
-          2. Click attachment button (paperclip icon)
-          3. Upload image file via file chooser
-          4. Wait for image preview to load
-          5. Type caption in caption input
-          6. Press Enter to send
-
-        Args:
-            phone:      13-digit normalized phone
-            image_path: Local path to image file e.g. "data/product.jpg"
-            caption:    Text caption rendered from message template
-            order_id:   For logging and screenshot naming
-
-        Returns:
-            SendResult with status SENT | FAILED | INVALID_NUMBER
-        """
-        self._log.info(f"→ Sending image to +{phone} [Order: {order_id}]")
+        """Send image with caption."""
+        self._log.info(f"→ Sending image to +{phone} [{order_id}]")
 
         try:
-            await self._rotate_tab()
-
-            await self._page.goto(
-                f"https://web.whatsapp.com/send?phone={phone}",
-                wait_until="domcontentloaded",
-                timeout=20_000
-            )
-
-            try:
-                await self._page.wait_for_selector(
-                    self.SEL["msg_input"],
-                    timeout=15_000
+            if not await self._manage_session_activity():
+                return SendResult(
+                    success=False,
+                    status="FAILED",
+                    error_message="Daily message limit reached."
                 )
-            except Exception:
-                if await self._check_invalid_number():
-                    return SendResult(
-                        success=False,
-                        status="INVALID_NUMBER",
-                        error_message="Phone not registered on WhatsApp"
-                    )
-                raise
+
+            await self._simulate_tab_switching()
+
+            success, msg_sel, error = await self._open_chat(phone)
+            if not success:
+                return self._handle_open_chat_error(error, phone)
 
             if await self._check_invalid_number():
                 return SendResult(
@@ -659,50 +1055,141 @@ class PlaywrightSender(WhatsAppSender):
                     error_message="Phone not registered on WhatsApp"
                 )
 
-            # Click the attachment (paperclip) button
-            await self._page.click(self.SEL["attach_btn"])
-            await asyncio.sleep(random.uniform(0.5, 1.0))
-
-            # Handle the file chooser dialog
-            async with self._page.expect_file_chooser() as fc_info:
-                await self._page.click('input[accept*="image"]')
-            file_chooser = await fc_info.value
-            await file_chooser.set_files(image_path)
-
-            # Wait for the image preview to appear in the media editor
-            await self._page.wait_for_selector(
-                'div[data-testid="media-editor"]',
-                timeout=10_000
-            )
-            await asyncio.sleep(1.0)
-
-            # Type caption in the caption input field
-            try:
-                await self._page.click(self.SEL["caption_input"])
-                await self._type_human(self.SEL["caption_input"], caption)
-            except Exception:
-                self._log.warning(
-                    "Caption input not found — sending image without caption"
+            already, preview = await self._check_campaign_in_history(4)
+            if already:
+                return SendResult(
+                    success=False,
+                    status="ALREADY_CONTACTED",
+                    error_message=f"Previous campaign: '{preview}'"
                 )
 
-            # Send with Enter
-            await self._page.keyboard.press("Enter")
-            await asyncio.sleep(2.0)   # Image upload takes longer to confirm
+            await self._page.click(self.SEL["attach_btn"])
+            await self._human_pause(0.5, 1.0)
 
-            screenshot_path = await self._take_screenshot(order_id)
-            self._msgs_on_tab += 1
+            async with self._page.expect_file_chooser() as fc_info:
+                await self._page.click('input[accept*="image"]')
+            fc = await fc_info.value
+            await fc.set_files(image_path)
 
-            return SendResult(
-                success=True,
-                status="SENT",
-                screenshot_path=screenshot_path
+            await self._page.wait_for_selector(
+                'div[data-testid="media-editor"]',
+                timeout=self._TIMEOUTS["media_editor"]
             )
+            await self._human_pause(0.8, 1.5)
+
+            if caption:
+                try:
+                    await self._page.click(self.SEL["caption_input"])
+                    await self._type_human_with_mistakes(self.SEL["caption_input"], caption)
+                except Exception:
+                    self._log.warning("Caption input not found")
+
+            await self._page.keyboard.press("Enter")
+            await self._human_pause(1.0, 2.0)
+
+            ss = await self._take_screenshot(order_id)
+            self._sends_this_session += 1
+
+            return SendResult(success=True, status="SENT", screenshot_path=ss)
 
         except Exception as e:
-            self._log.error(
-                f"  ✗ Image send failed for +{phone}: {e}",
-                exc_info=True
+            self._log.error(f"✗ Image failed: {e}", exc_info=True)
+            return SendResult(
+                success=False,
+                status="FAILED",
+                error_message=str(e)
             )
+
+    async def send_file_to_number(
+        self,
+        phone: str,
+        file_path: str,
+        caption: str,
+        order_id: str
+    ) -> SendResult:
+        """Send file as document attachment."""
+        self._log.info(f"→ Sending file to +{phone} [{order_id}]")
+
+        if not Path(file_path).exists():
+            return SendResult(
+                success=False,
+                status="FAILED",
+                error_message=f"File not found: {file_path}"
+            )
+
+        try:
+            if not await self._manage_session_activity():
+                return SendResult(
+                    success=False,
+                    status="FAILED",
+                    error_message="Daily message limit reached."
+                )
+
+            success, _, error = await self._open_chat(phone)
+            if not success:
+                return self._handle_open_chat_error(error, phone)
+
+            await self._human_pause(1.0, 2.0)
+
+            await self._page.click(self.SEL["attach_btn"])
+            await self._human_pause(0.8, 1.5)
+
+            try:
+                doc = await self._page.query_selector(
+                    'li[data-testid="mi-attach-document"], span[data-icon="attach-document"]'
+                )
+                if doc:
+                    await doc.click()
+                    await self._human_pause(0.3, 0.7)
+            except Exception:
+                pass
+
+            try:
+                async with self._page.expect_file_chooser(
+                    timeout=self._TIMEOUTS["file_upload"]
+                ) as fc_info:
+                    inputs = await self._page.query_selector_all('input[type="file"]')
+                    if inputs:
+                        await inputs[-1].click()
+                    else:
+                        await self._page.keyboard.press("Enter")
+                fc = await fc_info.value
+                await fc.set_files(file_path)
+            except Exception as e:
+                return SendResult(
+                    success=False,
+                    status="FAILED",
+                    error_message=f"File upload failed: {e}"
+                )
+
+            await self._human_pause(1.5, 2.5)
+
+            if caption:
+                for sel in [
+                    'div[aria-label="Add a caption"]',
+                    'div[aria-label="Type a message"]',
+                ]:
+                    try:
+                        el = await self._page.query_selector(sel)
+                        if el and await el.is_visible():
+                            await el.click()
+                            await self._type_human_with_mistakes(sel, caption)
+                            break
+                    except Exception:
+                        continue
+
+            await self._human_pause(0.5, 1.0)
+            await self._page.keyboard.press("Enter")
+
+            await self._wait_for_delivery_tick()
+
+            ss = await self._take_screenshot(order_id)
+            self._sends_this_session += 1
+
+            return SendResult(success=True, status="SENT", screenshot_path=ss)
+
+        except Exception as e:
+            self._log.error(f"✗ File failed: {e}", exc_info=True)
             return SendResult(
                 success=False,
                 status="FAILED",

@@ -173,6 +173,15 @@ class DelayConfig:
 # YAML file later by changing only this class.
 # ==============================================================
 
+"""
+    # ── PERSONAL WHATSAPP ──────────────────────────────────────
+    # Your personal WhatsApp number to receive the daily Excel report.
+    # Format: country code + number, no + sign, no spaces.
+    # Nigeria example: "2348012345678"
+    # Leave as "" to skip WhatsApp delivery (report saved locally only).
+    "personal_whatsapp": "2348XXXXXXXXX",  # EDIT ME
+"""
+
 class AppConfig:
     """
     Typed, validated configuration object built from the CONFIG dict.
@@ -197,11 +206,16 @@ class AppConfig:
         # Use the module-level CONFIG if no dict is passed
         # Passing a dict is useful for testing with different settings
         raw = raw or CONFIG
+        
+        self.personal_whatsapp = str(raw.get("personal_whatsapp", "")).strip()
+
 
         # Validate first — fail fast with a clear message
         self._validate(raw)
 
         # Core settings
+        self.personal_whatsapp = str(raw.get("personal_whatsapp", "")).strip()
+
         self.target_product   = str(raw["target_product"]).lower().strip()
         self.send_order       = str(raw["send_order"])
         self.daily_limit      = int(raw["daily_limit"])
@@ -330,3 +344,6 @@ class AppConfig:
             f"email={'configured' if self.has_email() else 'not configured'}"
             f")"
         )
+    def has_personal_whatsapp(self) -> bool:
+        """ True if a personal WhatsApp number is configured for report delivery """      
+        return bool(self.personal_whatsapp)

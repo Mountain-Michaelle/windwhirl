@@ -1,11 +1,7 @@
 
+import asyncio
 import logging
-import smtplib
 from datetime import datetime, date
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -13,44 +9,157 @@ logger = logging.getLogger(__name__)
 
 class Reporter:
     """
-    Generates the daily summary report and emails it.
+    Generates daily reports and delivers them.
 
-    Has no dependency on any other src/ module except Database
-    (passed at call time, not stored as a dependency).
-    This makes Reporter trivially testable and reusable from
-    any context — CLI, FastAPI route, scheduled task.
+    Produces two report files in reports/:
+      1. send_report_YYYY-MM-DD.xlsx  — full customer list with status
+      2. daily_report_YYYY-MM-DD.txt  — summary counts
+
+    Delivery:
+      Sends the Excel file to personal WhatsApp number.
+      Retries twice on failure.
+      If both attempts fail: file stays in reports/ only.
+      No email. No other delivery method.
 
     Usage:
-        reporter = Reporter()
-
-        # Generate and save the report:
-        report_text = reporter.generate_report(db)
-
-        # Optionally email it:
-        sent = reporter.send_email(report_text, cfg)
+        reporter = Reporter(cfg)
+        await reporter.run_end_of_day(db, sender)
     """
 
-    def __init__(self):
+    def __init__(self, cfg):
+        """
+        Args:
+            cfg: AppConfig instance
+        """
+        self._cfg = cfg
         self._log = logging.getLogger(self.__class__.__name__)
 
-    def generate_report(self, db) -> str:
+    async def run_end_of_day(self, db, sender):
         """
-        Build the daily text report from DB summary data.
-        Saves it to reports/daily_report_{date}.txt.
-        Returns the report as a string (for printing and emailing).
+        Master end-of-day method. Called by Scheduler after last session.
+
+        Flow:
+          1. Generate text summary → reports/daily_report_YYYY-MM-DD.txt
+          2. Generate Excel report → reports/send_report_YYYY-MM-DD.xlsx
+          3. Send Excel to personal WhatsApp (2 attempts max)
+          4. Log outcome
+
+        Args:
+            db:     Database instance
+            sender: PlaywrightSender instance (already connected)
+        """
+        self._log.info("Running end-of-day report generation...")
+
+        # ── Step 1: Text summary ───────────────────────────────
+        try:
+            summary_text = self.generate_text_report(db)
+            print("\n" + summary_text)
+        except Exception as e:
+            self._log.error(f"Text report failed: {e}", exc_info=True)
+            summary_text = None
+
+        # ── Step 2: Excel report ───────────────────────────────
+        excel_path = None
+        try:
+            from apps.core.lib.utils.excel_reporter import ExcelReporter
+            excel_reporter = ExcelReporter(self._cfg)
+            excel_path     = excel_reporter.generate(db)
+            self._log.info(f"Excel report ready: {excel_path}")
+        except Exception as e:
+            self._log.error(f"Excel report failed: {e}", exc_info=True)
+
+        # ── Step 3: Send Excel via WhatsApp ────────────────────
+        if excel_path and self._cfg.has_personal_whatsapp():
+            await self._send_via_whatsapp(sender, excel_path)
+        elif excel_path:
+            self._log.info(
+                "personal_whatsapp not configured — "
+                f"Excel report saved to {excel_path} only."
+            )
+        else:
+            self._log.warning(
+                "Excel report was not generated — nothing to send."
+            )
+
+    async def _send_via_whatsapp(self, sender, file_path: Path):
+        """
+        Send the Excel report to personal WhatsApp number.
+        Retries once on failure. Gives up after 2 total attempts.
+
+        The file always stays in reports/ regardless of outcome.
+        WhatsApp send is best-effort — failure is logged but
+        does not raise an exception.
+
+        Args:
+            sender:    PlaywrightSender instance (already connected)
+            file_path: Path to the Excel file to send
+        """
+        phone    = self._cfg.personal_whatsapp
+        caption  = (
+            f"📊 Nabeau Store — Daily Send Report\n"
+            f"Date: {date.today().strftime('%d %B %Y')}\n"
+            f"File: {file_path.name}"
+        )
+
+        max_attempts = 2
+
+        for attempt in range(1, max_attempts + 1):
+            self._log.info(
+                f"Sending report to personal WhatsApp "
+                f"+{phone} (attempt {attempt}/{max_attempts})..."
+            )
+            try:
+                result = await sender.send_file_to_number(
+                    phone=phone,
+                    file_path=str(file_path),
+                    caption=caption,
+                    order_id=f"REPORT_{date.today().strftime('%Y%m%d')}"
+                )
+
+                if result.success:
+                    self._log.info(
+                        f"✅ Report sent to WhatsApp +{phone} successfully."
+                    )
+                    return   # Success — exit retry loop
+
+                # Send returned a result but with failure status
+                self._log.warning(
+                    f"Attempt {attempt} failed: {result.error_message}"
+                )
+
+            except Exception as e:
+                self._log.warning(
+                    f"Attempt {attempt} exception: {e}"
+                )
+
+            # Wait before retry (only if there is a next attempt)
+            if attempt < max_attempts:
+                self._log.info("Waiting 30s before retry...")
+                await asyncio.sleep(30)
+
+        # Both attempts failed
+        self._log.warning(
+            f"WhatsApp report delivery failed after {max_attempts} attempts.\n"
+            f"Report is saved locally at: {file_path}\n"
+            f"Open it manually from the reports/ folder."
+        )
+
+    def generate_text_report(self, db) -> str:
+        """
+        Generate plain text summary report and save to reports/.
+        Returns the report string for printing to console.
 
         Args:
             db: Database instance
 
         Returns:
-            Full report as a plain text string.
+            Report as a plain text string.
         """
         summary   = db.get_daily_summary()
         today_str = date.today().strftime("%Y-%m-%d")
 
-        # ── Build report lines ─────────────────────────────────
         lines = [
-            f"WhatsApp Automation Report — {today_str}",
+            f"Nabeau Store — WhatsApp Send Report — {today_str}",
             "=" * 52,
             "",
             "SUMMARY",
@@ -66,10 +175,10 @@ class Reporter:
             "",
         ]
 
-        # ── Failed details ─────────────────────────────────────
+        # Failed customer details
         failed = summary.get("failed_details", [])
         if failed:
-            lines.append("FAILED — eligible for retry (run --reset-failed)")
+            lines.append("FAILED — run --reset-failed to retry tomorrow")
             lines.append("-" * 40)
             for item in failed:
                 lines.append(
@@ -78,19 +187,19 @@ class Reporter:
                     f"{item['error']}"
                 )
         else:
-            lines.append("FAILED: None")
+            lines.append("FAILED: None ✅")
 
         lines.append("")
 
-        # ── Invalid number details ─────────────────────────────
+        # Invalid number details
         invalid = summary.get("invalid_details", [])
         if invalid:
-            lines.append("INVALID NUMBERS — not on WhatsApp (will not retry)")
+            lines.append("INVALID NUMBERS — not on WhatsApp")
             lines.append("-" * 40)
             for item in invalid:
                 lines.append(f"  {item['name']}  |  {item['phone']}")
         else:
-            lines.append("INVALID NUMBERS: None")
+            lines.append("INVALID NUMBERS: None ✅")
 
         lines += [
             "",
@@ -100,85 +209,15 @@ class Reporter:
 
         report_text = "\n".join(lines)
 
-        # ── Save to file ───────────────────────────────────────
+        # Save text report
         Path("reports").mkdir(exist_ok=True)
         report_path = Path("reports") / f"daily_report_{today_str}.txt"
         report_path.write_text(report_text, encoding="utf-8")
-        self._log.info(f"Report saved: {report_path}")
+        self._log.info(f"Text report saved: {report_path}")
 
         return report_text
 
-    def send_email(self, report_text: str, cfg) -> bool:
-        """
-        Email the daily report via Gmail SMTP with STARTTLS.
-
-        IMPORTANT: This method NEVER raises an exception.
-        Email failure is logged and False is returned.
-        The automation must not crash because of a failed email.
-
-        Gmail App Password setup:
-          myaccount.google.com → Security → App Passwords
-          Generate one for "Mail" and add it to config.py smtp_password.
-          Do NOT use your regular Gmail password here.
-
-        Args:
-            report_text: The plain text report string.
-            cfg:         AppConfig instance (provides SMTP settings).
-
-        Returns:
-            True if email sent successfully.
-            False if email failed (check logs for details).
-        """
-        if not cfg.has_email():
-            self._log.info(
-                "Email not configured (smtp_password is empty) — skipping."
-            )
-            return False
-
-        try:
-            today_str   = date.today().strftime("%Y-%m-%d")
-            report_path = Path("reports") / f"daily_report_{today_str}.txt"
-
-            # ── Build the email ────────────────────────────────
-            msg            = MIMEMultipart()
-            msg["From"]    = cfg.smtp_email
-            msg["To"]      = cfg.smtp_to
-            msg["Subject"] = f"WhatsApp Automation Report — {today_str}"
-
-            # Plain text body
-            msg.attach(MIMEText(report_text, "plain"))
-
-            # Attach the saved report file if it exists
-            if report_path.exists():
-                with open(report_path, "rb") as f:
-                    part = MIMEBase("application", "octet-stream")
-                    part.set_payload(f.read())
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        "Content-Disposition",
-                        f"attachment; filename={report_path.name}"
-                    )
-                    msg.attach(part)
-
-            # ── Send via Gmail SMTP ────────────────────────────
-            # Port 587 with STARTTLS is the secure Gmail standard.
-            # Do not use port 465 (SSL) — STARTTLS is preferred.
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
-                smtp.ehlo()
-                smtp.starttls()
-                smtp.ehlo()
-                smtp.login(cfg.smtp_email, cfg.smtp_password)
-                smtp.sendmail(
-                    cfg.smtp_email,
-                    cfg.smtp_to,
-                    msg.as_string()
-                )
-
-            self._log.info(f"Report emailed successfully to {cfg.smtp_to}")
-            return True
-
-        except Exception as e:
-            # Log the full error but DO NOT raise
-            # Email failure must never crash the automation
-            self._log.error(f"Email report failed: {e}", exc_info=True)
-            return False
+    # ── Keep this for backward compatibility with CLI --report ─
+    def generate_report(self, db) -> str:
+        """Alias for generate_text_report. Used by --report CLI command."""
+        return self.generate_text_report(db)
