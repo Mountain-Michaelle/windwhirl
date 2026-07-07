@@ -1,3 +1,3 @@
-from app.oms.repositories.interfaces import IOrderRepository
+from apps.oms.repositories.interfaces import IOrderRepository
 
 __all__ = ["IOrderRepository"]

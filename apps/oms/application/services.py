@@ -1,7 +1,7 @@
 from typing import Optional
 
-from app.oms.domain.entities import Order, OrderStatus, RawMessage
-from app.oms.domain.interfaces import (
+from apps.oms.domain.entities import Order, OrderStatus, RawMessage
+from apps.oms.domain.interfaces import (
     IAssignmentEngine,
     IDuplicateDetector,
     IMessageSource,
@@ -9,10 +9,10 @@ from app.oms.domain.interfaces import (
     ISheetSynchronizer,
     IValidator,
 )
-from app.oms.domain.exceptions import OrderParseException
-from app.oms.events import dispatcher
-from app.oms.repositories.interfaces import IOrderRepository
-from app.oms.shared.logger import get_logger
+from apps.oms.domain.exceptions import OrderParseException
+from apps.oms.events import dispatcher
+from apps.oms.repositories.interfaces import IOrderRepository
+from apps.oms.shared.logger import get_logger
 
 log = get_logger(__name__)
 

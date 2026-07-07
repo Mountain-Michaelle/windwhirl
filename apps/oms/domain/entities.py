@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from apps.oms.domain.value_objects import CustomerInfo, OrderItem, PhoneNumber
 
 
 class OrderStatus(str, Enum):
@@ -135,7 +136,13 @@ class Order:
     detected_at:    datetime           = field(default_factory=datetime.now)
     updated_at:     datetime           = field(default_factory=datetime.now)
     notes:          str                = ""
-
+    customer:       CustomerInfo       = field(default_factory=CustomerInfo)
+    items:          list[OrderItem]    = field(default_factory=list)
+    total_price:    float              = 0.0
+    delivery_address: str             = ""
+    payment_method:   str             = ""
+    
+    
     def transition_to(self, new_status: OrderStatus) -> None:
         '''
         Move this order to a new status.
@@ -177,7 +184,16 @@ class Order:
             f"status={self.status.value}, "
             f"items={len(self.items)})"
         )
+    def item_summary(self) -> str:
+            '''Human-readable summary of ordered items for logging.'''
+            if not self.items:
+                return "(no items parsed)"
+            return ", ".join(str(item) for item in self.items)
 
+    @property
+    def total_quantity(self) -> int:
+        return sum(item.quantity for item in self.items)
+        
 
 @dataclass
 class Staff:

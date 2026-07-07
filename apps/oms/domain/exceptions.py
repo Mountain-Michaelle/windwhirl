@@ -1,4 +1,4 @@
-from app.oms.shared.exceptions import OMSException, ValidationException
+from apps.oms.shared.exceptions import OMSException, ValidationException
 
 
 class OrderException(OMSException):

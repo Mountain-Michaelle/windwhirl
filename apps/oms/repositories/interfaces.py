@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional
 
-from app.oms.domain.entities import Order, OrderStatus
+from apps.oms.domain.entities import Order, OrderStatus
 
 
 class IOrderRepository(ABC):

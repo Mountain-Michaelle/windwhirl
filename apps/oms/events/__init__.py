@@ -1,4 +1,4 @@
-from app.oms.events.dispatcher import EventDispatcher
+from apps.oms.events.dispatcher import EventDispatcher
 
 # Global singleton event dispatcher
 # Import this in any module that emits or listens to events:

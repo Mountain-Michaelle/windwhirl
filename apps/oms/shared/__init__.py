@@ -1,5 +1,5 @@
-from app.oms.shared.logger import get_logger
-from app.oms.shared.exceptions import (
+from apps.oms.shared.logger import get_logger
+from apps.oms.shared.exceptions import (
     OMSException,
     ConfigurationException,
     InfrastructureException,

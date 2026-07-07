@@ -2,7 +2,7 @@ import asyncio
 from collections import defaultdict
 from typing import Any, Callable, Coroutine
 
-from app.oms.shared.logger import get_logger
+from apps.oms.shared.logger import get_logger
 
 log = get_logger(__name__)
 

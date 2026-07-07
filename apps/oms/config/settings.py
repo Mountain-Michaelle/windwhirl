@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from app.oms.shared.exceptions import ConfigurationException
-from app.oms.shared.logger import get_logger
+from apps.oms.shared.exceptions import ConfigurationException
+from apps.oms.shared.logger import get_logger
 
 log = get_logger(__name__)
 
@@ -122,6 +122,41 @@ class RetrySettings:
     max_retries: int   = 3
     retry_delay: float = 5.0
 
+@dataclass
+class ObserverSettings:
+    '''
+    Settings for the passive message observer and recovery manager.
+
+    poll_interval_seconds: How often Python drains the JS message queue.
+                           Lower = more responsive. Higher = less overhead.
+                           Default: 2 seconds.
+
+    recovery_max_age_hours: Maximum offline duration to attempt recovery.
+                            If the OMS was offline longer than this, recovery
+                            is skipped and the live observer starts fresh.
+                            Default: 24 hours.
+
+    recovery_max_messages:  Maximum number of missed messages to replay.
+                            Prevents unbounded replay after a long outage.
+                            Default: 500.
+
+    recovery_max_scrolls:   Maximum scroll operations during recovery search.
+                            Prevents infinite scrolling if checkpoint not found.
+                            Default: 20.
+
+    message_cache_size:     Maximum fingerprints in the in-memory cache.
+                            Default: 1000.
+
+    checkpoint_history_size: How many checkpoint fingerprints to persist.
+                             More = higher recovery reliability.
+                             Default: 5.
+    '''
+    poll_interval_seconds:    float = 2.0
+    recovery_max_age_hours:   int   = 24
+    recovery_max_messages:    int   = 300
+    recovery_max_scrolls:     int   = 20
+    message_cache_size:       int   = 1000
+    checkpoint_history_size:  int   = 5
 
 @dataclass
 class LoggingSettings:
@@ -167,6 +202,7 @@ class OMSSettings:
     storage:  StorageSettings  = field(default_factory=StorageSettings)
     sheets:   SheetsSettings   = field(default_factory=SheetsSettings)
     retry:    RetrySettings    = field(default_factory=RetrySettings)
+    observer: ObserverSettings = field(default_factory=ObserverSettings)
     logging:  LoggingSettings  = field(default_factory=LoggingSettings)
 
     def __post_init__(self):
@@ -202,6 +238,13 @@ class OMSSettings:
             "OMS_RETRY_DELAY":              ("retry.retry_delay",         float),
             "OMS_LOGGING_LOG_DIR":          ("logging.log_dir",           str),
             "OMS_LOGGING_LOG_LEVEL":        ("logging.log_level",         str),
+
+            "OMS_OBSERVER_POLL_INTERVAL":      ("observer.poll_interval_seconds",   float),
+            "OMS_OBSERVER_MAX_AGE_HOURS":      ("observer.recovery_max_age_hours",  int),
+            "OMS_OBSERVER_MAX_MESSAGES":       ("observer.recovery_max_messages",   int),
+            "OMS_OBSERVER_MAX_SCROLLS":        ("observer.recovery_max_scrolls",    int),
+            "OMS_OBSERVER_CACHE_SIZE":         ("observer.message_cache_size",      int),
+            "OMS_OBSERVER_CHECKPOINT_HISTORY": ("observer.checkpoint_history_size", int),
         }
 
         for env_key, (attr_path, cast) in env_map.items():

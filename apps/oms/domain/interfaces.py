@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, Optional
-
-from app.oms.domain.entities import Order, RawMessage, Staff
+from apps.oms.domain.entities import Order, RawMessage, Staff
 
 
 class IMessageSource(ABC):
