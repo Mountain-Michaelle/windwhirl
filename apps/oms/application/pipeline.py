@@ -8,6 +8,7 @@ from apps.oms.domain.entities import Order, Staff
 from apps.oms.infrastructure.browser.raw_message import RawMessage
 from apps.oms.events import dispatcher
 from apps.oms.shared.logger import get_logger
+from apps.oms.application.assignment_state_engine import AssignmentStateEngine
 
 log = get_logger(__name__)
 
@@ -37,14 +38,17 @@ class MessagePipeline:
             await pipeline.process(message)
     '''
 
-    def __init__(
+    def __init__( 
         self,
         classifier:        MessageClassifier,
         parser:            OrderParser,
         validator:         OrderValidator,
         assignment_engine: SingleStaffAssignmentEngine,
         staff:             Staff,
+        state_engine:       AssignmentStateEngine, 
     ):
+
+        self._state_engine = state_engine        
         self._classifier = classifier
         self._parser     = parser
         self._validator  = validator
@@ -122,6 +126,18 @@ class MessagePipeline:
             )
             self._stats["skipped"] += 1
             return None
+        
+        if result.message_class == MessageClass.ASSIGNMENT:
+            state = await self._state_engine.observe_assignment(
+                raw_text=message.raw_text,
+                message =message,
+            )
+            log.info(
+                f"Assignment observed. State v{state.state_version}: "
+                f"pending={state.pending_count}, "
+                f"worker=+{state.current_worker or 'none'}"
+            )
+            return None    
 
         if not result.is_confident:
             log.info(
@@ -201,21 +217,17 @@ class MessagePipeline:
         )
 
         # ── Final: order.detected ────────────────────────────────
+        
+        
         # This is the terminal event — downstream (Day 5 storage,
         # Day 6 notifications) listens to this event.
-        await dispatcher.emit(
-            "order.detected",
-            order  =order,
-            source ="pipeline",
-        )
-
+        state = await self._state_engine.observe_order(order, message)
         log.info(
-            f"✅ ORDER COMPLETE: {order.order_id!r}\n"
-            f"   {order.customer_name} → {order.item_summary()}\n"
-            f"   Assigned to: +{assigned_staff.number}"
-        )
-
-        self._stats["total_processed"] = self._stats.get("total_processed", 0) + 1
+            f"Order observed by state engine. "
+            f"State v{state.state_version}: "
+            f"pending={state.pending_count}"
+        )        
+        await dispatcher.emit("order.detected", order=order, source="pipeline")
         return order
 
     def stats(self) -> dict:

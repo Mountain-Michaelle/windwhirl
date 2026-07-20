@@ -1,0 +1,10 @@
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:07:38
+Row           : 1
+Customer      : David Justice
+Phone         : 
+Address       : Before new road round about, Port Harcourt, River State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : [inconclusive] no success/error indicator found and URL unchanged

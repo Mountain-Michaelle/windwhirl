@@ -15,11 +15,34 @@ from apps.oms.shared.logger import get_logger
 
 log = get_logger(__name__)
 
+# ------------------------------------------------------------------
+# Primary selector for the message container.
+#
+# FIXED: was "#main div[data-testid='conversation-panel-messages']" —
+# that testid no longer exists in current WhatsApp Web (confirmed
+# absent from a live DOM dump). Every startup/reconnect was burning
+# a full 30s timeout waiting on a selector that can never match.
+#
+# "#main" itself is the long-standing, stable root of the open chat
+# panel — it's an actual element id, not one of Meta's rotating
+# atomic CSS classes, so it's a much safer anchor to wait on.
+# ------------------------------------------------------------------
+PRIMARY_CONTAINER_SELECTOR = "#main"
+
+# Timeout for waiting on the container element to appear.
+CONTAINER_WAIT_TIMEOUT = 30_000  # ms
+
+# How many poll cycles between proactive health checks.
+# POLL_INTERVAL is 2.0s, so 15 cycles ≈ every 30s.
+HEALTH_CHECK_EVERY_N_POLLS = 15
+
+# ------------------------------------------------------------------
 # JavaScript MutationObserver injected into the page.
 # This watches the WhatsApp chat container for new message nodes.
 # When a new message is inserted, it extracts the text, sender,
 # timestamp, and direction, then pushes to a global JS queue.
 # Python reads this queue via page.evaluate() on a timer.
+# ------------------------------------------------------------------
 _MUTATION_OBSERVER_JS = """
 () => {
     // Guard: don't inject multiple observers if called again
@@ -32,12 +55,25 @@ _MUTATION_OBSERVER_JS = """
     window.__omsObserverActive = true;
     window.__omsMsgCounter = window.__omsMsgCounter || 0;
 
-    // Find the chat message container
+    // Find the chat message container.
+    //
+    // FIXED: "#main" is now checked FIRST and is the primary target.
+    // The old order let narrower, single-message elements (like
+    // [data-testid="msg-container"], which belongs to ONE message
+    // bubble, not the list) match before #main — an observer attached
+    // there never sees new messages inserted elsewhere in the DOM.
+    // #main reliably wraps the entire scrollable conversation, so
+    // watching it with subtree:true catches every new message row
+    // no matter how WhatsApp nests things internally.
     const findContainer = () => {
         return (
-            document.querySelector('#main div[role="application"]') ||
-            document.querySelector('#main .copyable-area') ||
-            document.querySelector('#main')
+            document.querySelector('#main') ||
+            // Fallbacks only used if #main itself isn't found yet —
+            // should be rare, since #main is present as soon as any
+            // chat is open.
+            document.querySelector('div[data-testid="conversation-panel-messages"]') ||
+            document.querySelector('div[role="application"]') ||
+            document.querySelector('#app')
         );
     };
 
@@ -47,36 +83,58 @@ _MUTATION_OBSERVER_JS = """
         return { status: 'container_not_found' };
     }
 
-    // Extract message data from a DOM node
+    // Extract message data from a DOM node.
+    //
+    // FIXED (row matching): messages are identified by
+    // data-testid="conv-msg-<id>" — confirmed present on every
+    // message row in a live DOM capture. This is a semantic,
+    // functional attribute (WhatsApp needs it to address individual
+    // messages), unlike the atomic/obfuscated "xNNNNNNN" classes,
+    // so it's a much more durable anchor.
+    //
+    // FIXED (direction): the old check looked for ".message-in" /
+    // ".message-out" classes that do not exist anywhere in current
+    // WhatsApp Web markup — every message was silently dropped here,
+    // regardless of who sent it. Direction is now inferred from the
+    // delivery/read-receipt tick inside [data-testid="msg-meta"]:
+    // you only ever get a Sent/Delivered/Read tick on messages YOU
+    // sent. No tick present = incoming, from someone else.
     const extractMessage = (node) => {
         try {
-            // Only process actual message rows
-            if (!node.getAttribute || node.getAttribute('role') !== 'row') {
-                // Check children for a row
-                const row = node.querySelector && node.querySelector('div[role="row"]');
-                if (!row) return null;
-                node = row;
+            let msgNode = node;
+
+            // The added node is often a plain wrapper <div> containing
+            // the actual message element — find the real message node
+            // by its data-testid, whether it's the node itself or a
+            // descendant.
+            if (!msgNode.getAttribute ||
+                !(msgNode.getAttribute('data-testid') || '').startsWith('conv-msg-')) {
+                const found = msgNode.querySelector &&
+                    msgNode.querySelector('[data-testid^="conv-msg-"]');
+                if (!found) return null;
+                msgNode = found;
             }
 
-            const isIncoming = node.querySelector('.message-in') !== null;
-            const isOutgoing = node.querySelector('.message-out') !== null;
-            if (!isIncoming && !isOutgoing) return null;
-
             // Get text content
-            const textEl = node.querySelector(
-                '.copyable-text span[class*="selectable"],' +
-                '.copyable-text span[dir],' +
-                '.message-in .copyable-text,' +
-                '.message-out .copyable-text'
+            const textEl = msgNode.querySelector(
+                '[data-testid="selectable-text"], .copyable-text span[dir]'
             );
             const rawText = textEl ? textEl.innerText.trim() : '';
             if (!rawText) return null;
 
-            // Get timestamp and sender from data attribute
-            const tsEl    = node.querySelector('[data-pre-plain-text]');
+            // Get timestamp and sender from the data-pre-plain-text
+            // attribute, e.g. "[2:36 PM, 7/13/2026] Michael Nabeau: "
+            const tsEl    = msgNode.querySelector('[data-pre-plain-text]');
             const tsAttr  = tsEl ? tsEl.getAttribute('data-pre-plain-text') : '';
             const tsMatch = tsAttr.match(/\\[([^,]+),/);
             const snMatch = tsAttr.match(/\\] ([^:]+):/);
+
+            // Direction: presence of a status tick (Sent/Delivered/Read)
+            // inside msg-meta means this message was sent BY the
+            // logged-in account — i.e. outgoing.
+            const metaEl = msgNode.querySelector('[data-testid="msg-meta"]');
+            const hasStatusTick = !!(metaEl && metaEl.querySelector('[data-icon], [aria-label*="Sent"], [aria-label*="Delivered"], [aria-label*="Read"]'));
+            const isOutgoing = hasStatusTick;
 
             window.__omsMsgCounter++;
 
@@ -84,7 +142,7 @@ _MUTATION_OBSERVER_JS = """
                 rawText:      rawText,
                 timestamp:    tsMatch ? tsMatch[1].trim() : '',
                 sender:       snMatch ? snMatch[1].trim() : (isOutgoing ? 'You' : 'Unknown'),
-                direction:    isIncoming ? 'INCOMING' : 'OUTGOING',
+                direction:    isOutgoing ? 'OUTGOING' : 'INCOMING',
                 capturedMs:   Date.now(),
                 queueIdx:     window.__omsMsgCounter,
             };
@@ -95,33 +153,36 @@ _MUTATION_OBSERVER_JS = """
 
     // Create the MutationObserver
     const observer = new MutationObserver((mutations) => {
+        // Track testids already handled in this batch of mutations —
+        // prevents the same message being queued twice when both the
+        // wrapper node AND one of its children match independently.
+        const seenInBatch = new Set();
+
+        const tryExtract = (node) => {
+            const msg = extractMessage(node);
+            if (!msg) return;
+            const key = msg.timestamp + '|' + msg.sender + '|' + msg.rawText.slice(0, 40);
+            if (seenInBatch.has(key)) return;
+            seenInBatch.add(key);
+            window.__omsMessageQueue.push(msg);
+        };
+
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
-                // Only process element nodes (not text/comment nodes)
                 if (node.nodeType !== Node.ELEMENT_NODE) return;
 
-                const msg = extractMessage(node);
-                if (msg) {
-                    window.__omsMessageQueue.push(msg);
-                }
+                tryExtract(node);
 
-                // Also check immediate children (WhatsApp sometimes
-                // inserts a wrapper div containing the message row)
                 if (node.children) {
-                    Array.from(node.children).forEach((child) => {
-                        const childMsg = extractMessage(child);
-                        if (childMsg) {
-                            window.__omsMessageQueue.push(childMsg);
-                        }
-                    });
+                    Array.from(node.children).forEach((child) => tryExtract(child));
                 }
             });
         });
     });
 
-    // Observe the container for child additions
-    // subtree: true — watch all descendants, not just direct children
-    // childList: true — react to added/removed nodes
+    // Observe the container for child additions.
+    // subtree: true — watch all descendants, not just direct children.
+    // childList: true — react to added/removed nodes.
     observer.observe(container, {
         childList: true,
         subtree:   true,
@@ -130,7 +191,7 @@ _MUTATION_OBSERVER_JS = """
     // Store reference to allow cleanup later
     window.__omsObserver = observer;
 
-    return { status: 'active', containerTag: container.tagName };
+    return { status: 'active', containerTag: container.tagName, containerId: container.id || '' };
 }
 """
 
@@ -173,13 +234,9 @@ class DOMObserver:
 
     Injects a JavaScript MutationObserver into the WhatsApp Web page.
     The JS fires immediately when a new message node is added to the DOM.
-    Python polls the JS message queue every POLL_INTERVAL seconds.
-
-    This design means:
-      - Detection latency: ~0ms (JS reacts to DOM mutation instantly)
-      - Python overhead: POLL_INTERVAL seconds (only to drain the queue)
-      - No selector scanning in the Python poll loop
-      - No missed messages (JS buffers everything between Python polls)
+    Python polls the JS message queue every POLL_INTERVAL seconds, and
+    every HEALTH_CHECK_EVERY_N_POLLS cycles it also verifies the observer
+    is still alive, re-injecting if WhatsApp silently tore it down.
 
     Usage:
         observer = DOMObserver(page, cache, checkpoint_store, cfg)
@@ -206,6 +263,11 @@ class DOMObserver:
         self._id_counter = 0
         self._msg_count  = 0   # Messages processed this session
         self._group_name = cfg.whatsapp.group_name
+        self._polls_since_health_check = 0
+
+    # ----------------------------------------------------------------
+    #  Public API
+    # ----------------------------------------------------------------
 
     async def run(self) -> None:
         '''
@@ -238,11 +300,17 @@ class DOMObserver:
             f"Detection: instant (MutationObserver)"
         )
 
-        # Main poll loop — drains JS queue every POLL_INTERVAL seconds
+        # Main poll loop — drains JS queue every POLL_INTERVAL seconds,
+        # and periodically confirms the observer is still actually alive.
         while self._running:
             try:
                 await asyncio.sleep(self.POLL_INTERVAL)
                 await self._drain_queue()
+
+                self._polls_since_health_check += 1
+                if self._polls_since_health_check >= HEALTH_CHECK_EVERY_N_POLLS:
+                    self._polls_since_health_check = 0
+                    await self._ensure_observer_alive()
 
             except asyncio.CancelledError:
                 break
@@ -266,40 +334,100 @@ class DOMObserver:
         '''Signal the observer loop to stop cleanly.'''
         self._running = False
 
+    def stats(self) -> dict:
+        '''Return observer statistics for diagnostics.'''
+        return {
+            "messages_processed": self._msg_count,
+            "cache_stats":        self._cache.stats(),
+            "poll_interval":      self.POLL_INTERVAL,
+            "running":            self._running,
+        }
+
+    # ----------------------------------------------------------------
+    #  Private – injection
+    # ----------------------------------------------------------------
+
     async def _inject_observer(self) -> bool:
         '''
         Inject the JavaScript MutationObserver into the page.
-        Returns True if injection succeeded.
+
+        Waits for PRIMARY_CONTAINER_SELECTOR ("#main") to appear before
+        attempting injection, eliminating the "container not found"
+        timing race. Falls through to a short retry loop as a safety
+        net for transient page glitches.
         '''
         try:
-            result = await self._page.evaluate(_MUTATION_OBSERVER_JS)
-            status = result.get("status", "unknown")
-
-            if status == "active":
-                log.info(
-                    f"MutationObserver injected. "
-                    f"Container: {result.get('containerTag', '?')}"
-                )
-                return True
-
-            elif status == "already_active":
-                log.debug("MutationObserver already active — skipping injection.")
-                return True
-
-            elif status == "container_not_found":
-                log.warning(
-                    "WhatsApp chat container not found.\n"
-                    "Is the group chat open in the browser?"
-                )
-                return False
-
-            else:
-                log.warning(f"Unexpected injection status: {status!r}")
-                return False
-
+            await self._page.wait_for_selector(
+                PRIMARY_CONTAINER_SELECTOR,
+                state="attached",
+                timeout=CONTAINER_WAIT_TIMEOUT,
+            )
+            log.debug(
+                f"Primary container '{PRIMARY_CONTAINER_SELECTOR}' "
+                "is present in the DOM."
+            )
         except Exception as e:
-            log.error(f"Observer injection error: {e}", exc_info=True)
-            return False
+            log.warning(
+                f"Timed out waiting for primary container: {e}\n"
+                "Will still attempt injection with fallback selectors."
+            )
+
+        for attempt in range(1, self.MAX_INJECT_ATTEMPTS + 1):
+            try:
+                result = await self._page.evaluate(_MUTATION_OBSERVER_JS)
+                status = result.get("status", "unknown")
+
+                if status == "active":
+                    log.info(
+                        f"MutationObserver injected "
+                        f"(attempt {attempt}/{self.MAX_INJECT_ATTEMPTS}). "
+                        f"Container: <{result.get('containerTag', '?')} "
+                        f"id={result.get('containerId', '')!r}>"
+                    )
+                    return True
+
+                elif status == "already_active":
+                    log.debug("MutationObserver already active — skipping injection.")
+                    return True
+
+                elif status == "container_not_found":
+                    log.debug(
+                        f"Chat container not ready "
+                        f"(attempt {attempt}/{self.MAX_INJECT_ATTEMPTS}) "
+                        f"— retrying in {self.INJECT_RETRY_DELAY}s..."
+                    )
+                    if attempt < self.MAX_INJECT_ATTEMPTS:
+                        await asyncio.sleep(self.INJECT_RETRY_DELAY)
+                    continue
+
+                else:
+                    log.warning(
+                        f"Unexpected injection status: {status!r} "
+                        f"(attempt {attempt}/{self.MAX_INJECT_ATTEMPTS})"
+                    )
+                    if attempt < self.MAX_INJECT_ATTEMPTS:
+                        await asyncio.sleep(self.INJECT_RETRY_DELAY)
+                    continue
+
+            except Exception as e:
+                log.debug(
+                    f"Injection error "
+                    f"(attempt {attempt}/{self.MAX_INJECT_ATTEMPTS}): {e}"
+                )
+                if attempt < self.MAX_INJECT_ATTEMPTS:
+                    await asyncio.sleep(self.INJECT_RETRY_DELAY)
+
+        log.error(
+            f"Failed to inject MutationObserver after "
+            f"{self.MAX_INJECT_ATTEMPTS} attempts "
+            f"({self.MAX_INJECT_ATTEMPTS * self.INJECT_RETRY_DELAY:.0f}s total).\n"
+            "Check that the group chat is visible and fully loaded in the browser."
+        )
+        return False
+
+    # ----------------------------------------------------------------
+    #  Private – queue processing
+    # ----------------------------------------------------------------
 
     async def _drain_queue(self) -> None:
         '''
@@ -389,17 +517,38 @@ class DOMObserver:
             message_preview=msg.preview(),
         ))
 
+    # ----------------------------------------------------------------
+    #  Private – health & cleanup
+    # ----------------------------------------------------------------
+
     async def _check_observer_health(self) -> bool:
         '''
         Verify the injected MutationObserver is still active.
-        Called periodically to detect if the observer was cleared
-        (e.g., WhatsApp Web reloaded parts of the DOM).
         '''
         try:
             result = await self._page.evaluate(_HEALTH_CHECK_JS)
             return result.get("active", False)
         except Exception:
             return False
+
+    async def _ensure_observer_alive(self) -> None:
+        '''
+        FIXED: previously _check_observer_health() existed but nothing
+        ever called it, so a silently-cleared observer (e.g. WhatsApp
+        replacing the chat panel's DOM on a re-render) would never
+        recover — drain_queue() just kept returning [] forever with no
+        error. This is now called every HEALTH_CHECK_EVERY_N_POLLS
+        cycles from the main loop and re-injects if the observer died.
+        '''
+        alive = await self._check_observer_health()
+        if not alive:
+            log.warning(
+                "MutationObserver health check failed — observer is no "
+                "longer active. Re-injecting..."
+            )
+            await self._inject_observer()
+        else:
+            log.debug("MutationObserver health check OK — still active.")
 
     async def _cleanup(self) -> None:
         '''Stop the JavaScript MutationObserver cleanly.'''
@@ -409,11 +558,8 @@ class DOMObserver:
         except Exception as e:
             log.debug(f"Observer cleanup error (non-critical): {e}")
 
-    def stats(self) -> dict:
-        '''Return observer statistics for diagnostics.'''
-        return {
-            "messages_processed": self._msg_count,
-            "cache_stats":        self._cache.stats(),
-            "poll_interval":      self.POLL_INTERVAL,
-            "running":            self._running,
-        }
+    # ----------------------------------------------------------------
+    #  Class constants (kept as instance-friendly for clarity)
+    # ----------------------------------------------------------------
+    MAX_INJECT_ATTEMPTS = 10
+    INJECT_RETRY_DELAY  = 2.0

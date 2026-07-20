@@ -156,6 +156,10 @@ class BrowserHealthCheck:
         '''
         Attempt to reconnect the browser session.
         Emits browser events before and after reconnect attempt.
+
+        After successful reconnect, emits "browser.reconnected" so
+        the main loop can re-open the target group and restart
+        the DOM observer with the new page.
         '''
         log.warning(
             "Session confirmed unhealthy. Triggering reconnect..."
@@ -163,8 +167,8 @@ class BrowserHealthCheck:
 
         await dispatcher.emit(
             "browser.disconnected",
-            reason="Health check detected session loss",
-            fail_count=self._fail_count,
+            reason     ="Health check detected session loss",
+            fail_count =self._fail_count,
         )
 
         try:
@@ -173,24 +177,39 @@ class BrowserHealthCheck:
 
             await dispatcher.emit(
                 "browser.connected",
-                source="health_check_reconnect"
+                source="health_check_reconnect",
+                state =self._manager.state.value,
             )
 
-            log.info("Reconnect successful. Session restored.")
+            # ── THIS IS THE KEY ADDITION ──────────────────────────
+            # Emit "browser.reconnected" so the main loop knows
+            # to re-open the group and restart the DOM observer.
+            # The new page is available at session_manager.page
+            await dispatcher.emit(
+                "browser.reconnected",
+                source   ="health_check",
+                new_page =self._manager.page,   # Pass the new page directly
+            )
+
+            log.info(
+                "Reconnect successful. "
+                "Emitted browser.reconnected — observer will restart."
+            )
 
         except Exception as e:
             log.error(
-                f"Reconnect failed: {e}\n"
+                f"Reconnect failed: {e}\\n"
                 f"OMS browser is not operational. Manual restart required.",
                 exc_info=True
             )
 
             await dispatcher.emit(
                 "browser.error",
-                error=str(e),
-                source="health_check_reconnect"
+                error  =str(e),
+                source ="health_check_reconnect"
             )
-
+    
+    
     def stats(self) -> dict:
         '''Return health check statistics for diagnostics.'''
         return {

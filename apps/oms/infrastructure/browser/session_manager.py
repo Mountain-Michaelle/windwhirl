@@ -2,13 +2,14 @@ import asyncio
 from enum import Enum
 from typing import Optional
 
+from playwright_stealth import Stealth  # <-- NEW
 from apps.oms.domain.interfaces import ISessionManager
 from apps.oms.infrastructure.browser.profile import BrowserProfile
 from apps.oms.shared.exceptions import InfrastructureException
 from apps.oms.shared.logger import get_logger
 from apps.oms.mixins import GroupNavigationMixin    
 
-
+stealth = Stealth()
 log = get_logger(__name__)
 
 
@@ -211,6 +212,14 @@ class SessionManager(ISessionManager, GroupNavigationMixin):
         '''
         Launch Playwright Chromium with the persistent profile.
         Sets self._playwright, self._context, self._page.
+
+        Includes stealth measures to avoid WhatsApp detection:
+          - Realistic user‑agent (Chrome 120, Windows 10)
+          - Geolocation set to Lagos, Nigeria
+          - Languages, timezone already set from config
+          - `--disable-blink-features=AutomationControlled`
+          - `stealth_async(page)` patch after page creation
+          - Init script to hide `navigator.webdriver`
         '''
         from playwright.async_api import async_playwright
 
@@ -220,6 +229,17 @@ class SessionManager(ISessionManager, GroupNavigationMixin):
         self._playwright = await async_playwright().start()
 
         browser_cfg = self._cfg.browser
+
+        # --- Build a realistic context for WhatsApp ---
+        # Use a modern Chrome user‑agent (Windows)
+        user_agent = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+
+        # Geolocation for Lagos, Nigeria (to match timezone Africa/Lagos)
+        geolocation = {"latitude": 6.5244, "longitude": 3.3792}
 
         # launch_persistent_context creates a browser with a saved profile.
         # This is different from launch() + new_context() because the
@@ -231,15 +251,26 @@ class SessionManager(ISessionManager, GroupNavigationMixin):
                 "width":  browser_cfg.viewport_w,
                 "height": browser_cfg.viewport_h,
             },
-            locale=browser_cfg.locale,
-            timezone_id=browser_cfg.timezone,
+            locale=browser_cfg.locale,          # 'en-US'
+            timezone_id=browser_cfg.timezone,   # 'Africa/Lagos'
+            user_agent=user_agent,              # <-- NEW
+            permissions=["geolocation"],        # <-- NEW
+            geolocation=geolocation,            # <-- NEW
+            device_scale_factor=1,
+            has_touch=False,
+            is_mobile=False,
+            color_scheme="light",
             args=[
                 "--no-sandbox",
-                # Suppress the automation banner visible to users
+                # Disable the "Chrome is being controlled by automated test software" banner
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 # Suppress notification permission prompts
                 "--disable-notifications",
+                # Additional anti‑detection flags
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-site-isolation-trials",
             ],
         )
 
@@ -251,7 +282,20 @@ class SessionManager(ISessionManager, GroupNavigationMixin):
             else await self._context.new_page()
         )
 
-        log.info("Browser launched successfully.")
+        # ========================
+        # STEALTH: apply patches
+        # ========================
+        # 1. playwright-stealth – patches many fingerprint leaks
+        await stealth.apply_stealth_async(self._page)
+        log.debug("Stealth patches applied via playwright-stealth")
+
+        # 2. Extra init script to hide webdriver (belt and braces)
+        await self._page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        """)
+        log.debug("navigator.webdriver removed via init script")
+
+        log.info("Browser launched successfully with stealth measures.")
 
     async def _load_whatsapp(self) -> None:
         '''

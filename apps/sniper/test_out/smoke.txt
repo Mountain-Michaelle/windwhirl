@@ -1,0 +1,110 @@
+STEP 1
+
+Search Customer
+
+Value:
+Chinelo
+
+Selector:
+page.locator('xpath=//body/form[1]/table[2]/tbody[1]/tr[1]/td[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 2
+
+Fill Phone
+
+Value:
+2348141666361
+
+Selector:
+page.locator('xpath=//body/form[1]/table[2]/tbody[1]/tr[2]/td[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 3
+
+Choose Product
+
+Value:
+Sadoer Collagen Serum
+
+Selector:
+page.locator("#selpro")
+Fallback:
+page.locator('xpath=//*[@id="selpro"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 4
+
+Choose Variant
+
+Value:
+30ml & 100g NGN29500
+
+Selector:
+page.locator("#pricevar")
+Fallback:
+page.locator('xpath=//*[@id="pricevar"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 5
+
+Choose State
+
+Value:
+Anambra
+
+Selector:
+page.locator("#state")
+Fallback:
+page.locator('xpath=//*[@id="state"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 6
+
+Fill Field 1
+
+Value:
+Cash
+
+Selector:
+page.locator('xpath=//body/form[1]/select[2]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 7
+
+Submit
+
+Selector:
+page.locator("#submit")
+Fallback:
+page.locator('xpath=//*[@id="submit"]')
+
+Wait:
+element clickable
+
+Result:
+Success: Order Saved Successfully

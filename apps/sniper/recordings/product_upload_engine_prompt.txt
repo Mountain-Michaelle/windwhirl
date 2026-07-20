@@ -1,0 +1,19 @@
+PRODUCT UPLOAD ENGINE ARCHITECTURE & IMPLEMENTATION PROMPT
+
+Build only the Product Upload Engine and minimal runner.
+
+Architecture: Excel->Normalize->Resolve Product->Resolve Price->Infer
+State->Validate->Upload->Verify->Delay->Next.
+
+Rules: - Max 3 files: product_upload_engine.py, runner.py,
+failed_orders.txt. - Reuse existing Playwright/session manager. -
+Navigate directly to Multiple Order page. - Read only required Excel
+headers. - Fuzzy match CRM products. - Ignore free gifts (hand cream,
+scar cream, bonus, gift, sample, etc.). - Wait for variants after
+product selection. - Match displayed variant by Excel price. - If no
+match: choose Custom and fill quantity+price. - Infer Nigerian state
+from address only. - Payment always Cash. - Verify success before
+continuing. - Wait random 1-30s after each successful upload. - Never
+stop batch on failure. - Export failed_orders.txt with all data needed
+for manual upload. - Keep implementation simple; no unnecessary
+abstractions.

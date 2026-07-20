@@ -1,0 +1,110 @@
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:04
+Row           : 1
+Customer      : David Justice
+Phone         : 
+Address       : Before new road round about, Port Harcourt, River State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:07
+Row           : 2
+Customer      : Lucky boy
+Phone         : 
+Address       : Delta, Warri, Ughoton
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:09
+Row           : 3
+Customer      : Bafoday camara
+Phone         : 
+Address       : 70,ebitu,ukiwe,Street
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : could not infer state from address '70,ebitu,ukiwe,Street'
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:14
+Row           : 4
+Customer      : Okite Edith
+Phone         : 
+Address       : 35Nna street Abakaliki, Ebonyi state
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:17
+Row           : 5
+Customer      : Elavete lucky
+Phone         : 
+Address       : Okpanam by city gate, Asaba State.
+Product       : 1 Combo set -(1 serum & 1 Cream) + 2 FREE Spa Facial Masks + Free Doorstep Delivery — ₦29,500
+Quantity      : 
+Intended price: 29500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:22
+Row           : 6
+Customer      : Fam
+Phone         : 
+Address       : Agbor delta state
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:26
+Row           : 7
+Customer      : Lemuwa Innocent chijoke
+Phone         : 
+Address       : No 7 Adewale street off bayuf busstop badagry express way, Lagos
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:30
+Row           : 8
+Customer      : Olajide temitope itunu
+Phone         : 
+Address       : Ikorodu garage from there to igbogbo from there to Agufoye last bus stop, Lagos State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:33
+Row           : 9
+Customer      : Fabulous Soweto
+Phone         : 
+Address       : Cross river state, ikom.
+Product       : 1 Advanced Collagen Body Lotion + 1 Free Scar Repair Cream + Free Collagen Hand Cream + Free doorstep delivery — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:35
+Row           : 10
+Customer      : Chinelo
+Phone         : 
+Address       : GUO park Unizik junction Awka, Anambra state
+Product       : 1 Combo set -(1 serum & 1 Cream) + 2 FREE Spa Facial Masks + Free Doorstep Delivery — ₦29,500
+Quantity      : 
+Intended price: 29500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:13:37
+Row           : 11
+Customer      : Olaleye mojirola
+Phone         : 
+Address       : 7, kemi salami street, obadore Lagos
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: cannot access local variable 'options' where it is not associated with a value

@@ -7,6 +7,8 @@ import asyncio
 import random
 from typing import TYPE_CHECKING, Tuple, Optional
 
+from apps.oms.shared.logger import get_logger
+
 if TYPE_CHECKING:
     from apps.oms.infrastructure.browser.session_manager import SessionManager
 
@@ -63,7 +65,7 @@ class GroupNavigationMixin:
             True if group was found and opened successfully.
             False if group could not be found.
         '''
-        log = self.log
+        log = get_logger("oms.runner")
         page = self._page
         
         SEARCH_SEL = 'input[aria-label="Search or start a new chat"]'

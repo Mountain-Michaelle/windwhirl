@@ -1,0 +1,90 @@
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:31:04
+Row           : 1
+Customer      : David Justice
+Phone         : 
+Address       : Before new road round about, Port Harcourt, River State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:32:05
+Row           : 2
+Customer      : Lucky boy
+Phone         : 
+Address       : Delta, Warri, Ughoton
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:33:05
+Row           : 3
+Customer      : Bafoday camara
+Phone         : 
+Address       : 70,ebitu,ukiwe,Street Abuja
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:34:06
+Row           : 4
+Customer      : Okite Edith
+Phone         : 
+Address       : 35Nna street Abakaliki, Ebonyi state
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:35:07
+Row           : 5
+Customer      : Elavete lucky
+Phone         : 
+Address       : Okpanam by city gate, Asaba State.
+Product       : 1 Combo set -(1 serum & 1 Cream) + 2 FREE Spa Facial Masks + Free Doorstep Delivery — ₦29,500
+Quantity      : 
+Intended price: 29500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:36:03
+Row           : 6
+Customer      : Fam
+Phone         : 
+Address       : Agbor delta state
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:37:08
+Row           : 7
+Customer      : Lemuwa Innocent chijoke
+Phone         : 
+Address       : No 7 Adewale street off bayuf busstop badagry express way, Lagos
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:38:21
+Row           : 8
+Customer      : Olajide temitope itunu
+Phone         : 
+Address       : Ikorodu garage from there to igbogbo from there to Agufoye last bus stop, Lagos State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 19:39:28
+Row           : 9
+Customer      : Fabulous Soweto
+Phone         : 
+Address       : Cross river state, ikom.
+Product       : 1 Advanced Collagen Body Lotion + 1 Free Scar Repair Cream + Free Collagen Hand Cream + Free doorstep delivery — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'phone' came back empty after 3 attempt(s) to type '' into it -- something on the page is rejecting or clearing this field

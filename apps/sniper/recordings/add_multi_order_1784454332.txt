@@ -1,0 +1,351 @@
+STEP 1
+
+Choose Product
+
+Value:
+Sadoer Collagen Combo Set
+
+Selector:
+page.locator("#selpro")
+Fallback:
+page.locator('xpath=//*[@id="selpro"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 2
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 3
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 4
+
+Fill Qty[]
+
+Value:
+2 30ml & 100g NGN52000
+
+Selector:
+page.locator("#pricevar")
+Fallback:
+page.locator('xpath=//*[@id="pricevar"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 5
+
+Choose Product
+
+Value:
+Sadoer Collagen Combo + Body Lotion
+
+Selector:
+page.locator("#selpro")
+Fallback:
+page.locator('xpath=//*[@id="selpro"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 6
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 7
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 8
+
+Fill Qty[]
+
+Value:
+Select
+
+Selector:
+page.locator("#pricevar")
+Fallback:
+page.locator('xpath=//*[@id="pricevar"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 9
+
+Fill Qty[]
+
+Value:
+Custom
+
+Selector:
+page.locator("#pricevar")
+Fallback:
+page.locator('xpath=//*[@id="pricevar"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 10
+
+Fill Qty_C[]
+
+Value:
+4
+
+Selector:
+page.locator('[name="qty_c[]"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[1]/tbody[1]/tr[1]/td[2]/div[1]/div[1]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 11
+
+Fill Qty_C[]
+
+Value:
+47000
+
+Selector:
+page.locator('[name="qty_c[]"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[1]/tbody[1]/tr[1]/td[2]/div[1]/div[1]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 12
+
+Fill Qty_C[]
+
+Value:
+1
+
+Selector:
+page.locator('[name="qty_c[]"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[1]/tbody[1]/tr[1]/td[2]/div[1]/div[1]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 13
+
+Fill Price_C[]
+
+Value:
+47000
+
+Selector:
+page.locator('[name="price_c[]"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[1]/tbody[1]/tr[1]/td[2]/div[1]/div[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 14
+
+Fill Cname
+
+Value:
+Obi
+
+Selector:
+page.locator('[name="cname"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[1]/td[1]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 15
+
+Fill Cname
+
+Value:
+Obioma
+
+Selector:
+page.locator('[name="cname"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[1]/td[1]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 16
+
+Fill Phone
+
+Value:
++2347061900855
+
+Selector:
+page.locator('[name="cphone"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[2]/td[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 17
+
+Fill Phone
+
+Value:
++2347061900855
+
+Selector:
+page.locator('[name="cwaphone"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[2]/td[3]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 18
+
+Fill Address
+
+Value:
+Alvan ikoku university, imo state
+
+Selector:
+page.locator('[name="caddress"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[1]/td[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 19
+
+Choose State
+
+Value:
+Imo
+
+Selector:
+page.locator("#state")
+Fallback:
+page.locator('xpath=//*[@id="state"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 20
+
+Submit
+
+Selector:
+page.locator("#submit")
+Fallback:
+page.locator('xpath=//*[@id="submit"]')
+
+Wait:
+element clickable
+
+--------------------------------
+
+STEP 21
+
+Fill Pgmain
+
+Value:
+Cash
+
+Selector:
+page.locator('[name="pgmain"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[2]/tbody[1]/tr[1]/td[3]/select[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 22
+
+Submit
+
+Selector:
+page.locator("#submit")
+Fallback:
+page.locator('xpath=//*[@id="submit"]')
+
+Wait:
+element clickable
+
+--------------------------------
+
+STEP 23
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 24
+
+Navigation
+
+Wait:
+domcontentloaded

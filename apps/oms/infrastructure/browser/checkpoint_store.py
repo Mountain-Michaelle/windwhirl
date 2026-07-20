@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from app.oms.shared.logger import get_logger
+from apps.oms.shared.logger import get_logger
 
 log = get_logger(__name__)
 

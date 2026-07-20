@@ -129,9 +129,17 @@ class BrowserProfile:
                     for f in self._path.rglob("*")
                     if f.is_file()
                 )
-                # Check for Chromium's Cookies file as a session indicator
-                cookies_path = self._path / "Default" / "Cookies"
-                has_cookies  = cookies_path.exists() and cookies_path.stat().st_size > 1024
+                # Chromium stores cookies at Default/Cookies (older)
+                # or Default/Network/Cookies (newer, Windows confirmed).
+                # Check both — whichever exists and has data counts.
+                cookies_old = self._path / "Default" / "Cookies"
+                cookies_new = self._path / "Default" / "Network" / "Cookies"
+                has_cookies = (
+                    (cookies_old.exists() and cookies_old.stat().st_size > 1024)
+                    or
+                    (cookies_new.exists() and cookies_new.stat().st_size > 1024)
+                )
+                
             except Exception as e:
                 log.debug(f"Profile inspection error: {e}")
 

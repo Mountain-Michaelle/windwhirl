@@ -1,0 +1,30 @@
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 12:31:45
+Row           : 1
+Customer      : David Justice
+Phone         : 
+Address       : Before new road round about, Port Harcourt, River State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500.0
+Reason        : 'Sadoer Collagen Combo + Body Lotion': Excel price did not match any default bundle, but Excel qty is missing -- cannot fill Qty_C[] without inventing a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 12:32:31
+Row           : 2
+Customer      : Lucky boy
+Phone         : 
+Address       : Delta, Warri, Ughoton
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500.0
+Reason        : 'Sadoer Collagen Combo + Body Lotion': Excel price did not match any default bundle, but Excel qty is missing -- cannot fill Qty_C[] without inventing a value
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 12:32:34
+Row           : 3
+Customer      : Bafoday camara
+Phone         : 
+Address       : 70,ebitu,ukiwe,Street
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500.0
+Reason        : could not infer state from address '70,ebitu,ukiwe,Street'

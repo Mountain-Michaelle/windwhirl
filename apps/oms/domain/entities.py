@@ -128,7 +128,6 @@ class Order:
     order_id:       str
     staff_number:   str
     customer_name:  str
-    items:          list[str]
     raw_text:       str
     source_message: RawMessage
     status:         OrderStatus        = OrderStatus.DETECTED

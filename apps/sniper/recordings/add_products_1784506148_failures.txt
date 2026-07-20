@@ -1,0 +1,27 @@
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 20:14:23
+Row           : 3
+Customer      : Bafoday camara
+Phone         : 2206407892
+Address       : 70,ebitu,ukiwe,Street Abuja
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : unexpected error: Locator.select_option: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#state")
+    - locator resolved to <select id="state" required="" name="cstate" class="custom-select">…</select>
+  - attempting select option action
+    2 × waiting for element to be visible and enabled
+      - did not find some options
+    - retrying select option action
+    - waiting 20ms
+    2 × waiting for element to be visible and enabled
+      - did not find some options
+    - retrying select option action
+      - waiting 100ms
+    57 × waiting for element to be visible and enabled
+       - did not find some options
+     - retrying select option action
+       - waiting 500ms
+

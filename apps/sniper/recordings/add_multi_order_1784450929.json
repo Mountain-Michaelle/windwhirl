@@ -1,0 +1,14 @@
+[
+  {
+    "step_number": 1,
+    "action_type": "Navigation",
+    "description": "Navigated to app.snipercrm.io/index.php",
+    "value": null,
+    "best_selector": null,
+    "fallback_selector": null,
+    "wait_condition": "domcontentloaded",
+    "success_condition": null,
+    "field_tag": null,
+    "timestamp": 1784451045.3543084
+  }
+]

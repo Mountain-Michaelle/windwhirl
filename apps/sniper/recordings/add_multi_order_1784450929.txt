@@ -1,0 +1,6 @@
+STEP 1
+
+Navigation
+
+Wait:
+domcontentloaded

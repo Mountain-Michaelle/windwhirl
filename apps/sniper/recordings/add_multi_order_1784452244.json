@@ -1,0 +1,50 @@
+[
+  {
+    "step_number": 1,
+    "action_type": "Fill Username",
+    "description": "Username",
+    "value": "CR-Michael",
+    "best_selector": "page.locator('[name=\"username\"]')",
+    "fallback_selector": "page.locator('xpath=//body/div[2]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[4]/div[1]/form[1]/div[1]/div[1]/input[1]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "input",
+    "timestamp": 1784452681.072411
+  },
+  {
+    "step_number": 2,
+    "action_type": "Fill Password",
+    "description": "password",
+    "value": "CR-Michael",
+    "best_selector": "page.locator(\"#pass_log_id\")",
+    "fallback_selector": "page.locator('xpath=//*[@id=\"pass_log_id\"]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "input",
+    "timestamp": 1784452681.2731488
+  },
+  {
+    "step_number": 3,
+    "action_type": "Sniperbutton",
+    "description": "sniperbutton",
+    "value": null,
+    "best_selector": "page.get_by_text(\"Sign In (Old dashboard)\", exact=True)",
+    "fallback_selector": "page.locator('xpath=//*[@id=\"sniperbutton\"]')",
+    "wait_condition": "element clickable",
+    "success_condition": null,
+    "field_tag": null,
+    "timestamp": 1784452681.391513
+  },
+  {
+    "step_number": 4,
+    "action_type": "Navigation",
+    "description": "Navigated to app.snipercrm.io/cshome",
+    "value": null,
+    "best_selector": null,
+    "fallback_selector": null,
+    "wait_condition": "domcontentloaded",
+    "success_condition": null,
+    "field_tag": null,
+    "timestamp": 1784452681.4448266
+  }
+]

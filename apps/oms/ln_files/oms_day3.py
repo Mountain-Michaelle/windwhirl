@@ -8,7 +8,10 @@
 #   FILE 3  → infrastructure/browser/checkpoint_store.py
 #   FILE 4  → infrastructure/browser/recovery_manager.py
 #   FILE 5  → infrastructure/browser/dom_observer.py
-#   FILE 6  → infrastructure/browser/__init__.py     (update)
+#   FILE 6  → infrastructure/
+# 
+# 
+# /__init__.py     (update)
 #   FILE 7  → infrastructure/__init__.py             (update)
 #   FILE 8  → config/settings.py                     (add observer settings)
 #   FILE 9  → session_manager.py                     (add group navigation)

@@ -1,0 +1,20 @@
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:26:33
+Row           : 1
+Customer      : David Justice
+Phone         : 
+Address       : Before new road round about, Port Harcourt, River State
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'Sadoer Collagen Combo + Body Lotion': no CRM default bundle matched Excel price, and no 'Custom' option was found in #pricevar -- cannot safely proceed
+------------------------------------------------------------------------------
+Timestamp     : 2026-07-19 18:27:32
+Row           : 2
+Customer      : Lucky boy
+Phone         : 
+Address       : Delta, Warri, Ughoton
+Product       : 1 Advanced Collagen Body Lotion + Free Scar Repair Cream + Free Collagen Hand Cream — ₦28,500
+Quantity      : 
+Intended price: 28500
+Reason        : 'Sadoer Collagen Combo + Body Lotion': no CRM default bundle matched Excel price, and no 'Custom' option was found in #pricevar -- cannot safely proceed

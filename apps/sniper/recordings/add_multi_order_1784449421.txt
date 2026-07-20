@@ -1,0 +1,183 @@
+STEP 1
+
+Choose Product
+
+Value:
+Sadoer Collagen Combo Set
+
+Selector:
+page.locator("#selpro")
+Fallback:
+page.locator('xpath=//*[@id="selpro"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 2
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 3
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 4
+
+Fill Qty[]
+
+Value:
+1 30ml & 100g NGN29500
+
+Selector:
+page.locator("#pricevar")
+Fallback:
+page.locator('xpath=//*[@id="pricevar"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 5
+
+Fill Cname
+
+Value:
+Chinelo
+
+Selector:
+page.locator('[name="cname"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[1]/td[1]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 6
+
+Fill Phone
+
+Value:
++2348141666361
+
+Selector:
+page.locator('[name="cphone"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[2]/td[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 7
+
+Fill Phone
+
+Value:
++2348141666361
+
+Selector:
+page.locator('[name="cwaphone"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[2]/td[3]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 8
+
+Fill Address
+
+Value:
+GUO park Unizik junction Awka, Anambra state
+
+Selector:
+page.locator('[name="caddress"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[3]/tbody[1]/tr[1]/td[2]/input[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 9
+
+Choose State
+
+Value:
+Anambra
+
+Selector:
+page.locator("#state")
+Fallback:
+page.locator('xpath=//*[@id="state"]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 10
+
+Fill Pgmain
+
+Value:
+Cash
+
+Selector:
+page.locator('[name="pgmain"]')
+Fallback:
+page.locator('xpath=//body/div[4]/div[2]/div[2]/section[1]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/form[1]/table[2]/tbody[1]/tr[1]/td[3]/select[1]')
+
+Wait:
+element visible & enabled
+
+--------------------------------
+
+STEP 11
+
+Submit
+
+Selector:
+page.locator("#submit")
+Fallback:
+page.locator('xpath=//*[@id="submit"]')
+
+Wait:
+element clickable
+
+--------------------------------
+
+STEP 12
+
+Network Call
+
+Wait:
+response received
+
+--------------------------------
+
+STEP 13
+
+Navigation
+
+Wait:
+domcontentloaded

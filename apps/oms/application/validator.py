@@ -1,6 +1,6 @@
 from apps.oms.domain.entities import Order
 from apps.oms.domain.interfaces import IValidator
-from apps.oms.shared.logger import get_logger, get_loggerapps
+from apps.oms.shared.logger import get_logger 
 log = get_logger(__name__)
 
 

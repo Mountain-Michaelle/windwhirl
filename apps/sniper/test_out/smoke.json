@@ -1,0 +1,86 @@
+[
+  {
+    "step_number": 1,
+    "action_type": "Search Customer",
+    "description": "Customers Name",
+    "value": "Chinelo",
+    "best_selector": "page.locator('xpath=//body/form[1]/table[2]/tbody[1]/tr[1]/td[2]/input[1]')",
+    "fallback_selector": "page.locator('xpath=//body/form[1]/table[2]/tbody[1]/tr[1]/td[2]/input[1]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "input",
+    "timestamp": 1784401560.941973
+  },
+  {
+    "step_number": 2,
+    "action_type": "Fill Phone",
+    "description": "Phone Number",
+    "value": "2348141666361",
+    "best_selector": "page.locator('xpath=//body/form[1]/table[2]/tbody[1]/tr[2]/td[2]/input[1]')",
+    "fallback_selector": "page.locator('xpath=//body/form[1]/table[2]/tbody[1]/tr[2]/td[2]/input[1]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "input",
+    "timestamp": 1784401561.5829754
+  },
+  {
+    "step_number": 3,
+    "action_type": "Choose Product",
+    "description": "Product",
+    "value": "Sadoer Collagen Serum",
+    "best_selector": "page.locator(\"#selpro\")",
+    "fallback_selector": "page.locator('xpath=//*[@id=\"selpro\"]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "select",
+    "timestamp": 1784401563.1347072
+  },
+  {
+    "step_number": 4,
+    "action_type": "Choose Variant",
+    "description": "Qty/Price",
+    "value": "30ml & 100g NGN29500",
+    "best_selector": "page.locator(\"#pricevar\")",
+    "fallback_selector": "page.locator('xpath=//*[@id=\"pricevar\"]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "select",
+    "timestamp": 1784401563.214804
+  },
+  {
+    "step_number": 5,
+    "action_type": "Choose State",
+    "description": "state",
+    "value": "Anambra",
+    "best_selector": "page.locator(\"#state\")",
+    "fallback_selector": "page.locator('xpath=//*[@id=\"state\"]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "select",
+    "timestamp": 1784401563.5102763
+  },
+  {
+    "step_number": 6,
+    "action_type": "Fill Field 1",
+    "description": "Field 1",
+    "value": "Cash",
+    "best_selector": "page.locator('xpath=//body/form[1]/select[2]')",
+    "fallback_selector": "page.locator('xpath=//body/form[1]/select[2]')",
+    "wait_condition": "element visible & enabled",
+    "success_condition": null,
+    "field_tag": "select",
+    "timestamp": 1784401563.7193134
+  },
+  {
+    "step_number": 7,
+    "action_type": "Submit",
+    "description": "submit",
+    "value": null,
+    "best_selector": "page.locator(\"#submit\")",
+    "fallback_selector": "page.locator('xpath=//*[@id=\"submit\"]')",
+    "wait_condition": "element clickable",
+    "success_condition": "Success: Order Saved Successfully",
+    "field_tag": null,
+    "timestamp": 1784401564.121748
+  }
+]

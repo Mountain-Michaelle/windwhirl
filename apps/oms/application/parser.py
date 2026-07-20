@@ -5,11 +5,11 @@ import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Set, Tuple
 
-from app.oms.domain.entities import Order, OrderStatus
-from app.oms.domain.value_objects import CustomerInfo, OrderItem, PhoneNumber
-from app.oms.domain.interfaces import IParser
-from app.oms.infrastructure.browser.raw_message import RawMessage
-from app.oms.shared.logger import get_logger
+from apps.oms.domain.entities import Order, OrderStatus
+from apps.oms.domain.value_objects import CustomerInfo, OrderItem, PhoneNumber
+from apps.oms.domain.interfaces import IParser
+from apps.oms.infrastructure.browser.raw_message import RawMessage
+from apps.oms.shared.logger import get_logger
 
 log = get_logger(__name__)
 
